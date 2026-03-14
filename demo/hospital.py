@@ -57,6 +57,10 @@ class HospitalAgent(BaseAgent):
         Returns (result, delegation_info) where delegation_info contains
         the verification chain for UI display.
         """
+        # Inject department context from the delegation chain
+        if "department" not in args and hasattr(self, '_department'):
+            args["department"] = self._department
+
         if self.delegation is None:
             return None, {
                 "status": "DENIED",
@@ -146,6 +150,7 @@ class OrchestratorAgent(HospitalAgent):
         )
         agent.delegation = delegation
         agent.authority_manager = self.authority_manager
+        agent._department = getattr(self, '_department', 'cardiology')
         return delegation
 
 
@@ -270,6 +275,7 @@ class HospitalAuthorityManager:
         )
         orchestrator.delegation = delegation
         orchestrator.authority_manager = self
+        orchestrator._department = department
         return delegation
 
     def revoke(self, agent):
