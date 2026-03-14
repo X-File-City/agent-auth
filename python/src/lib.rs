@@ -362,6 +362,11 @@ impl Delegation {
     #[getter]
     fn depth(&self) -> usize { self.inner.depth() }
 
+    /// Get the content hash of this delegation's proof (for revocation).
+    fn content_hash(&self) -> String {
+        self.inner.proof.content_hash()
+    }
+
     fn __repr__(&self) -> String {
         format!("Delegation(issuer='{}', delegate='{}')", self.inner.issuer_did, self.inner.delegate_did)
     }
