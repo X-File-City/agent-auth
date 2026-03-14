@@ -104,7 +104,7 @@ describe("ProvenanceEntry", () => {
   it("tampered agent_did fails verify", () => {
     const kp = generateKeyPair();
     const entry = createProvenanceEntry(kp, "resolve", ["e1"], [], {});
-    entry.agent_did = "did:kanoniv:tampered";
+    entry.agent_did = "did:agent:tampered";
     assert.throws(() => verifyProvenanceEntry(entry, kp.identity));
   });
 

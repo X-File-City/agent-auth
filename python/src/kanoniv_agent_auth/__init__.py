@@ -1,4 +1,4 @@
-"""Cryptographic identity primitives for AI agents."""
+"""Cryptographic identity and delegation for AI agents."""
 
 from kanoniv_agent_auth._native import (
     AgentKeyPair,
@@ -6,6 +6,9 @@ from kanoniv_agent_auth._native import (
     SignedMessage,
     ProvenanceEntry,
     PyServiceEndpoint as ServiceEndpoint,
+    Delegation,
+    Invocation,
+    verify_invocation,
 )
 
 __all__ = [
@@ -14,4 +17,7 @@ __all__ = [
     "SignedMessage",
     "ProvenanceEntry",
     "ServiceEndpoint",
+    "Delegation",
+    "Invocation",
+    "verify_invocation",
 ]

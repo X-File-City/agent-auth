@@ -184,7 +184,7 @@ mod tests {
     fn test_signer_did_populated() {
         let kp = test_keypair();
         let signed = SignedMessage::sign(&kp, serde_json::json!({})).unwrap();
-        assert!(signed.signer_did.starts_with("did:kanoniv:"));
+        assert!(signed.signer_did.starts_with("did:agent:"));
         assert_eq!(signed.signer_did, kp.identity().did);
     }
 
@@ -235,8 +235,8 @@ mod tests {
     #[test]
     fn test_canonical_ordering_deterministic() {
         let payload = serde_json::json!({"z": 1, "a": 2, "m": 3});
-        let b1 = canonical_bytes(&payload, "did:kanoniv:test", "nonce1", "ts1").unwrap();
-        let b2 = canonical_bytes(&payload, "did:kanoniv:test", "nonce1", "ts1").unwrap();
+        let b1 = canonical_bytes(&payload, "did:agent:test", "nonce1", "ts1").unwrap();
+        let b2 = canonical_bytes(&payload, "did:agent:test", "nonce1", "ts1").unwrap();
         assert_eq!(b1, b2);
     }
 
@@ -254,7 +254,7 @@ mod tests {
     fn test_tampered_signer_did_fails() {
         let kp = test_keypair();
         let mut signed = SignedMessage::sign(&kp, serde_json::json!({})).unwrap();
-        signed.signer_did = "did:kanoniv:0000000000000000000000000000fake".to_string();
+        signed.signer_did = "did:agent:0000000000000000000000000000fake".to_string();
 
         let identity = kp.identity();
         assert!(matches!(
@@ -316,14 +316,14 @@ mod tests {
     fn test_canonical_bytes_different_payloads_differ() {
         let b1 = canonical_bytes(
             &serde_json::json!({"x": 1}),
-            "did:kanoniv:test",
+            "did:agent:test",
             "nonce1",
             "ts1",
         )
         .unwrap();
         let b2 = canonical_bytes(
             &serde_json::json!({"x": 2}),
-            "did:kanoniv:test",
+            "did:agent:test",
             "nonce1",
             "ts1",
         )
@@ -334,8 +334,8 @@ mod tests {
     #[test]
     fn test_canonical_bytes_different_nonces_differ() {
         let payload = serde_json::json!({"x": 1});
-        let b1 = canonical_bytes(&payload, "did:kanoniv:test", "nonce-a", "ts1").unwrap();
-        let b2 = canonical_bytes(&payload, "did:kanoniv:test", "nonce-b", "ts1").unwrap();
+        let b1 = canonical_bytes(&payload, "did:agent:test", "nonce-a", "ts1").unwrap();
+        let b2 = canonical_bytes(&payload, "did:agent:test", "nonce-b", "ts1").unwrap();
         assert_ne!(b1, b2);
     }
 

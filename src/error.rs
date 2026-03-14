@@ -20,4 +20,10 @@ pub enum CryptoError {
 
     #[error("Integrity check failed: outer field '{0}' does not match signed payload")]
     IntegrityMismatch(String),
+
+    #[error("Delegation chain broken: {0}")]
+    DelegationChainBroken(String),
+
+    #[error("Caveat violation: {0}")]
+    CaveatViolation(String),
 }

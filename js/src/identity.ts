@@ -66,20 +66,22 @@ export function identityFromMultibase(multibase: string): AgentIdentity {
 
 /** Public identity derived from a keypair - safe to share and store. */
 export interface AgentIdentity {
-  /** Decentralized identifier: did:kanoniv:{hex(sha256(pubkey)[..16])} */
+  /** Decentralized identifier: did:agent:{hex(sha256(pubkey)[..16])} */
   did: string;
   /** Raw public key bytes (32 bytes, Ed25519) */
   publicKeyBytes: Uint8Array;
+  /** When this key was created (RFC 3339, if known) */
+  createdAt?: string;
 }
 
 /** Compute the DID from public key bytes. */
 export function computeDid(publicKeyBytes: Uint8Array): string {
   const hash = sha256(publicKeyBytes);
   const shortHash = bytesToHex(hash.slice(0, 16));
-  return `did:kanoniv:${shortHash}`;
+  return `did:agent:${shortHash}`;
 }
 
-/** Create an AgentIdentity from public key bytes. */
+/** Create an AgentIdentity from public key bytes (no creation timestamp). */
 export function identityFromBytes(bytes: Uint8Array): AgentIdentity {
   if (bytes.length !== 32) {
     throw CryptoError.invalidKeyLength(bytes.length);
@@ -90,6 +92,11 @@ export function identityFromBytes(bytes: Uint8Array): AgentIdentity {
   };
 }
 
+/** Get current UTC timestamp in RFC 3339 millis format. */
+function nowRfc3339(): string {
+  return new Date().toISOString().replace(/(\.\d{3})\d*Z$/, "$1Z");
+}
+
 /** An agent's Ed25519 keypair. */
 export interface AgentKeyPair {
   /** 32-byte secret key */
@@ -98,19 +105,23 @@ export interface AgentKeyPair {
   identity: AgentIdentity;
 }
 
-/** Generate a new random Ed25519 keypair. */
+/** Generate a new random Ed25519 keypair with current timestamp. */
 export function generateKeyPair(): AgentKeyPair {
   const secretKey = ed.utils.randomPrivateKey();
   const publicKey = ed.getPublicKey(secretKey);
   const identity: AgentIdentity = {
     did: computeDid(publicKey),
     publicKeyBytes: publicKey,
+    createdAt: nowRfc3339(),
   };
   return { secretKey, identity };
 }
 
 /** Reconstruct a keypair from 32-byte secret key. */
-export function keyPairFromBytes(secret: Uint8Array): AgentKeyPair {
+export function keyPairFromBytes(
+  secret: Uint8Array,
+  createdAt?: string,
+): AgentKeyPair {
   if (secret.length !== 32) {
     throw CryptoError.invalidKeyLength(secret.length);
   }
@@ -118,6 +129,7 @@ export function keyPairFromBytes(secret: Uint8Array): AgentKeyPair {
   const identity: AgentIdentity = {
     did: computeDid(publicKey),
     publicKeyBytes: publicKey,
+    createdAt,
   };
   return { secretKey: new Uint8Array(secret), identity };
 }
@@ -143,20 +155,22 @@ export function didDocumentWithServices(
   services: ServiceEndpoint[],
 ): Record<string, unknown> {
   const pkMultibase = encodeMultibaseEd25519(identity.publicKeyBytes);
+  const vm: Record<string, unknown> = {
+    id: `${identity.did}#key-1`,
+    type: "Ed25519VerificationKey2020",
+    controller: identity.did,
+    publicKeyMultibase: pkMultibase,
+  };
+  if (identity.createdAt) {
+    vm.created = identity.createdAt;
+  }
   const doc: Record<string, unknown> = {
     "@context": [
       "https://www.w3.org/ns/did/v1",
       "https://w3id.org/security/suites/ed25519-2020/v1",
     ],
     id: identity.did,
-    verificationMethod: [
-      {
-        id: `${identity.did}#key-1`,
-        type: "Ed25519VerificationKey2020",
-        controller: identity.did,
-        publicKeyMultibase: pkMultibase,
-      },
-    ],
+    verificationMethod: [vm],
     authentication: [`${identity.did}#key-1`],
     assertionMethod: [`${identity.did}#key-1`],
   };

@@ -59,7 +59,7 @@ describe("SignedMessage", () => {
   it("signer_did is populated", () => {
     const kp = generateKeyPair();
     const signed = signMessage(kp, {});
-    assert.ok(signed.signer_did.startsWith("did:kanoniv:"));
+    assert.ok(signed.signer_did.startsWith("did:agent:"));
     assert.equal(signed.signer_did, kp.identity.did);
   });
 
@@ -108,7 +108,7 @@ describe("SignedMessage", () => {
   it("tampered signer_did fails", () => {
     const kp = generateKeyPair();
     const signed = signMessage(kp, {});
-    signed.signer_did = "did:kanoniv:0000000000000000000000000000fake";
+    signed.signer_did = "did:agent:0000000000000000000000000000fake";
     assert.throws(() => verifyMessage(signed, kp.identity));
   });
 });

@@ -238,7 +238,7 @@ mod tests {
         )
         .unwrap();
 
-        entry.agent_did = "did:kanoniv:tampered".into();
+        entry.agent_did = "did:agent:tampered".into();
 
         assert!(matches!(
             entry.verify(&kp.identity()),

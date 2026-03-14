@@ -29,3 +29,13 @@ export {
   provenanceContentHash,
   ACTION_TYPES,
 } from "./provenance.js";
+export {
+  type Caveat,
+  type Delegation,
+  type Invocation,
+  type VerificationResult,
+  createRootDelegation,
+  delegateAuthority,
+  createInvocation,
+  verifyInvocation,
+} from "./delegation.js";

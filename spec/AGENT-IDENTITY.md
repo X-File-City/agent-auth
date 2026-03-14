@@ -33,12 +33,12 @@ Secret keys are exported as raw 32-byte arrays. Implementations SHOULD support:
 
 Storage of secret keys is the responsibility of the caller. Keys SHOULD be stored encrypted at rest.
 
-## 3. DID Method: `did:kanoniv`
+## 3. DID Method: `did:agent`
 
 ### 3.1 DID Format
 
 ```
-did:kanoniv:<identifier>
+did:agent:<identifier>
 ```
 
 Where `<identifier>` is computed as:
@@ -52,13 +52,13 @@ identifier = hex_encode(SHA-256(public_key_bytes)[0..16])
 - `[0..16]`: First 16 bytes of the hash (128-bit truncation)
 - `hex_encode`: Lowercase hexadecimal encoding
 
-The resulting DID is always exactly `did:kanoniv:` followed by 32 lowercase hex characters.
+The resulting DID is always exactly `did:agent:` followed by 32 lowercase hex characters.
 
 **Example:**
 ```
 Public key (hex): d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a
 SHA-256 of key:   21fe31dfa154a261626bf854046fd227...
-DID:              did:kanoniv:21fe31dfa154a261626bf854046fd227
+DID:              did:agent:21fe31dfa154a261626bf854046fd227
 ```
 
 ### 3.2 DID Document
@@ -68,15 +68,15 @@ Implementations MUST generate a W3C-compatible DID Document:
 ```json
 {
   "@context": ["https://www.w3.org/ns/did/v1"],
-  "id": "did:kanoniv:21fe31dfa154a261626bf854046fd227",
+  "id": "did:agent:21fe31dfa154a261626bf854046fd227",
   "verificationMethod": [{
-    "id": "did:kanoniv:21fe31dfa154a261626bf854046fd227#key-1",
+    "id": "did:agent:21fe31dfa154a261626bf854046fd227#key-1",
     "type": "Ed25519VerificationKey2020",
-    "controller": "did:kanoniv:21fe31dfa154a261626bf854046fd227",
+    "controller": "did:agent:21fe31dfa154a261626bf854046fd227",
     "publicKeyBase64": "<base64-standard-encoded-public-key>"
   }],
-  "authentication": ["did:kanoniv:21fe31dfa154a261626bf854046fd227#key-1"],
-  "assertionMethod": ["did:kanoniv:21fe31dfa154a261626bf854046fd227#key-1"]
+  "authentication": ["did:agent:21fe31dfa154a261626bf854046fd227#key-1"],
+  "assertionMethod": ["did:agent:21fe31dfa154a261626bf854046fd227#key-1"]
 }
 ```
 
@@ -90,7 +90,7 @@ Implementations MUST generate a W3C-compatible DID Document:
 ```json
 {
   "payload": <any JSON value>,
-  "signer_did": "did:kanoniv:<identifier>",
+  "signer_did": "did:agent:<identifier>",
   "nonce": "<uuid-v4>",
   "timestamp": "<rfc3339-millis-utc>",
   "signature": "<hex-encoded-ed25519-signature>"
@@ -121,7 +121,7 @@ The signature covers a **canonical byte representation** of the envelope, comput
 
 **Example canonical form:**
 ```json
-{"nonce":"<uuid>","payload":{"z":1,"a":2},"signer_did":"did:kanoniv:...","timestamp":"2026-01-01T00:00:00.000Z"}
+{"nonce":"<uuid>","payload":{"z":1,"a":2},"signer_did":"did:agent:...","timestamp":"2026-01-01T00:00:00.000Z"}
 ```
 
 Note: payload keys `z` and `a` retain their original order.
@@ -165,7 +165,7 @@ This hash is used as a unique identifier for the message, notably as `parent_id`
 
 ```json
 {
-  "agent_did": "did:kanoniv:<identifier>",
+  "agent_did": "did:agent:<identifier>",
   "action": "<action_type>",
   "entity_ids": ["<id>", ...],
   "parent_ids": ["<content_hash>", ...],
@@ -235,7 +235,7 @@ The `fixtures/` directory contains deterministic test vectors generated from a k
 ```
 Secret: 9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60
 Public: d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a
-DID:    did:kanoniv:21fe31dfa154a261626bf854046fd227
+DID:    did:agent:21fe31dfa154a261626bf854046fd227
 ```
 
 ### 6.2 Interop Requirements

@@ -73,6 +73,12 @@ impl AgentIdentity {
         self.inner.public_key_bytes.clone()
     }
 
+    /// When this key was created (RFC 3339), or None if unknown.
+    #[getter]
+    fn created_at(&self) -> Option<String> {
+        self.inner.created_at.clone()
+    }
+
     /// Reconstruct from raw public key bytes.
     #[staticmethod]
     fn from_bytes(bytes: &[u8]) -> PyResult<Self> {
@@ -307,6 +313,109 @@ fn parse_action_type(s: &str) -> PyResult<kanoniv_agent_auth::ActionType> {
     }
 }
 
+/// Python wrapper around Delegation.
+#[pyclass(frozen, from_py_object)]
+#[derive(Clone)]
+struct Delegation {
+    inner: kanoniv_agent_auth::Delegation,
+}
+
+#[pymethods]
+impl Delegation {
+    /// Create a root delegation.
+    #[staticmethod]
+    fn create_root(
+        issuer_keypair: &AgentKeyPair,
+        subject_did: &str,
+        caveats_json: &str,
+    ) -> PyResult<Self> {
+        let caveats: Vec<kanoniv_agent_auth::Caveat> = serde_json::from_str(caveats_json)
+            .map_err(|e| PyValueError::new_err(format!("Invalid caveats JSON: {}", e)))?;
+        let inner = kanoniv_agent_auth::Delegation::create_root(
+            &issuer_keypair.inner, subject_did, caveats,
+        ).map_err(|e| PyValueError::new_err(e.to_string()))?;
+        Ok(Self { inner })
+    }
+
+    /// Delegate authority to another agent (with parent chain).
+    #[staticmethod]
+    fn delegate(
+        issuer_keypair: &AgentKeyPair,
+        subject_did: &str,
+        additional_caveats_json: &str,
+        parent: &Delegation,
+    ) -> PyResult<Self> {
+        let caveats: Vec<kanoniv_agent_auth::Caveat> = serde_json::from_str(additional_caveats_json)
+            .map_err(|e| PyValueError::new_err(format!("Invalid caveats JSON: {}", e)))?;
+        let inner = kanoniv_agent_auth::Delegation::delegate(
+            &issuer_keypair.inner, subject_did, caveats, parent.inner.clone(),
+        ).map_err(|e| PyValueError::new_err(e.to_string()))?;
+        Ok(Self { inner })
+    }
+
+    #[getter]
+    fn issuer_did(&self) -> String { self.inner.issuer_did.clone() }
+
+    #[getter]
+    fn subject_did(&self) -> String { self.inner.subject_did.clone() }
+
+    #[getter]
+    fn depth(&self) -> usize { self.inner.depth() }
+
+    fn __repr__(&self) -> String {
+        format!("Delegation(issuer='{}', subject='{}')", self.inner.issuer_did, self.inner.subject_did)
+    }
+}
+
+/// Python wrapper around Invocation.
+#[pyclass(frozen, from_py_object)]
+#[derive(Clone)]
+struct Invocation {
+    inner: kanoniv_agent_auth::Invocation,
+}
+
+#[pymethods]
+impl Invocation {
+    /// Create an invocation exercising delegated authority.
+    #[staticmethod]
+    fn create(
+        invoker_keypair: &AgentKeyPair,
+        action: &str,
+        args_json: &str,
+        delegation: &Delegation,
+    ) -> PyResult<Self> {
+        let args: serde_json::Value = serde_json::from_str(args_json)
+            .map_err(|e| PyValueError::new_err(format!("Invalid JSON: {}", e)))?;
+        let inner = kanoniv_agent_auth::Invocation::create(
+            &invoker_keypair.inner, action, args, delegation.inner.clone(),
+        ).map_err(|e| PyValueError::new_err(e.to_string()))?;
+        Ok(Self { inner })
+    }
+
+    #[getter]
+    fn invoker_did(&self) -> String { self.inner.invoker_did.clone() }
+
+    #[getter]
+    fn action(&self) -> String { self.inner.action.clone() }
+
+    fn __repr__(&self) -> String {
+        format!("Invocation(invoker='{}', action='{}')", self.inner.invoker_did, self.inner.action)
+    }
+}
+
+/// Verify an invocation's full authority chain. Returns (invoker_did, root_did, chain, depth).
+#[pyfunction]
+fn verify_invocation(
+    invocation: &Invocation,
+    invoker_identity: &AgentIdentity,
+    root_identity: &AgentIdentity,
+) -> PyResult<(String, String, Vec<String>, usize)> {
+    let result = kanoniv_agent_auth::verify_invocation(
+        &invocation.inner, &invoker_identity.inner, &root_identity.inner,
+    ).map_err(|e| PyValueError::new_err(e.to_string()))?;
+    Ok((result.invoker_did, result.root_did, result.chain, result.depth))
+}
+
 #[pymodule]
 fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<AgentKeyPair>()?;
@@ -314,5 +423,8 @@ fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<SignedMessage>()?;
     m.add_class::<ProvenanceEntry>()?;
     m.add_class::<PyServiceEndpoint>()?;
+    m.add_class::<Delegation>()?;
+    m.add_class::<Invocation>()?;
+    m.add_function(pyo3::wrap_pyfunction!(verify_invocation, m)?)?;
     Ok(())
 }

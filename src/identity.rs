@@ -1,4 +1,4 @@
-//! Agent cryptographic identity - Ed25519 keypairs and `did:kanoniv:` identifiers.
+//! Agent cryptographic identity - Ed25519 keypairs and `did:agent:` identifiers.
 
 use ed25519_dalek::{SigningKey, VerifyingKey};
 use rand::rngs::OsRng;
@@ -10,15 +10,19 @@ use crate::CryptoError;
 /// An agent's Ed25519 keypair used for signing messages and proving identity.
 pub struct AgentKeyPair {
     signing_key: SigningKey,
+    created_at: chrono::DateTime<chrono::Utc>,
 }
 
 /// Public identity derived from a keypair - safe to share and store.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct AgentIdentity {
-    /// Decentralized identifier: `did:kanoniv:{hex(sha256(pubkey)[..16])}`
+    /// Decentralized identifier: `did:agent:{hex(sha256(pubkey)[..16])}`
     pub did: String,
     /// Raw public key bytes (32 bytes, Ed25519)
     pub public_key_bytes: Vec<u8>,
+    /// When this key was created (if known). Used for trust freshness policies.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub created_at: Option<String>,
 }
 
 /// A service endpoint for a DID Document (W3C DID Core specification).
@@ -46,16 +50,36 @@ impl ServiceEndpoint {
 }
 
 impl AgentKeyPair {
-    /// Generate a new random Ed25519 keypair.
+    /// Generate a new random Ed25519 keypair with current timestamp.
     pub fn generate() -> Self {
         let signing_key = SigningKey::generate(&mut OsRng);
-        Self { signing_key }
+        Self {
+            signing_key,
+            created_at: chrono::Utc::now(),
+        }
     }
 
     /// Reconstruct from existing secret key bytes (32 bytes).
+    ///
+    /// Use `from_bytes_with_created_at` if the original creation time is known.
     pub fn from_bytes(secret: &[u8; 32]) -> Self {
         let signing_key = SigningKey::from_bytes(secret);
-        Self { signing_key }
+        Self {
+            signing_key,
+            created_at: chrono::Utc::now(),
+        }
+    }
+
+    /// Reconstruct from secret key bytes with a known creation time.
+    pub fn from_bytes_with_created_at(
+        secret: &[u8; 32],
+        created_at: chrono::DateTime<chrono::Utc>,
+    ) -> Self {
+        let signing_key = SigningKey::from_bytes(secret);
+        Self {
+            signing_key,
+            created_at,
+        }
     }
 
     /// Export the secret key bytes for persistence (e.g. to a key file).
@@ -71,22 +95,34 @@ impl AgentKeyPair {
     /// Derive the public identity from this keypair.
     pub fn identity(&self) -> AgentIdentity {
         let verifying_key = self.signing_key.verifying_key();
-        AgentIdentity::from_public_key(&verifying_key)
+        let ts = self.created_at.to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+        AgentIdentity::from_public_key_with_created_at(&verifying_key, Some(ts))
+    }
+
+    /// Get the key creation timestamp.
+    pub fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
+        &self.created_at
     }
 }
 
 impl AgentIdentity {
-    /// Create an identity from a public verifying key.
+    /// Create an identity from a public verifying key (no creation timestamp).
     pub fn from_public_key(key: &VerifyingKey) -> Self {
+        Self::from_public_key_with_created_at(key, None)
+    }
+
+    /// Create an identity from a public verifying key with optional creation timestamp.
+    pub fn from_public_key_with_created_at(key: &VerifyingKey, created_at: Option<String>) -> Self {
         let public_key_bytes = key.to_bytes().to_vec();
         let did = Self::compute_did(&public_key_bytes);
         Self {
             did,
             public_key_bytes,
+            created_at,
         }
     }
 
-    /// Reconstruct from raw public key bytes (32 bytes).
+    /// Reconstruct from raw public key bytes (32 bytes, no creation timestamp).
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, CryptoError> {
         if bytes.len() != 32 {
             return Err(CryptoError::InvalidKeyLength(bytes.len()));
@@ -95,6 +131,7 @@ impl AgentIdentity {
         Ok(Self {
             did,
             public_key_bytes: bytes.to_vec(),
+            created_at: None,
         })
     }
 
@@ -117,18 +154,22 @@ impl AgentIdentity {
     /// communicate with this agent (messaging, API, coordination).
     pub fn did_document_with_services(&self, services: &[ServiceEndpoint]) -> serde_json::Value {
         let pk_multibase = Self::encode_multibase_ed25519(&self.public_key_bytes);
+        let mut vm = serde_json::json!({
+            "id": format!("{}#key-1", self.did),
+            "type": "Ed25519VerificationKey2020",
+            "controller": self.did,
+            "publicKeyMultibase": pk_multibase
+        });
+        if let Some(ref ts) = self.created_at {
+            vm["created"] = serde_json::Value::String(ts.clone());
+        }
         let mut doc = serde_json::json!({
             "@context": [
                 "https://www.w3.org/ns/did/v1",
                 "https://w3id.org/security/suites/ed25519-2020/v1"
             ],
             "id": self.did,
-            "verificationMethod": [{
-                "id": format!("{}#key-1", self.did),
-                "type": "Ed25519VerificationKey2020",
-                "controller": self.did,
-                "publicKeyMultibase": pk_multibase
-            }],
+            "verificationMethod": [vm],
             "authentication": [format!("{}#key-1", self.did)],
             "assertionMethod": [format!("{}#key-1", self.did)]
         });
@@ -156,11 +197,11 @@ impl AgentIdentity {
     }
 
     /// Compute the DID string from public key bytes.
-    /// Format: `did:kanoniv:{hex(sha256(pubkey)[..16])}`
+    /// Format: `did:agent:{hex(sha256(pubkey)[..16])}`
     fn compute_did(public_key_bytes: &[u8]) -> String {
         let hash = Sha256::digest(public_key_bytes);
         let short_hash = hex::encode(&hash[..16]);
-        format!("did:kanoniv:{}", short_hash)
+        format!("did:agent:{}", short_hash)
     }
 
     /// Encode a public key as multibase (z + base58btc(multicodec_prefix + key)).
@@ -204,7 +245,7 @@ mod tests {
     fn test_generate_keypair() {
         let kp = AgentKeyPair::generate();
         let identity = kp.identity();
-        assert!(identity.did.starts_with("did:kanoniv:"));
+        assert!(identity.did.starts_with("did:agent:"));
         assert_eq!(identity.public_key_bytes.len(), 32);
     }
 
@@ -228,9 +269,9 @@ mod tests {
     fn test_did_format() {
         let kp = AgentKeyPair::generate();
         let did = kp.identity().did;
-        // did:kanoniv:<32 hex chars>
-        assert!(did.starts_with("did:kanoniv:"));
-        let suffix = &did["did:kanoniv:".len()..];
+        // did:agent:<32 hex chars>
+        assert!(did.starts_with("did:agent:"));
+        let suffix = &did["did:agent:".len()..];
         assert_eq!(suffix.len(), 32); // 16 bytes = 32 hex chars
         assert!(suffix.chars().all(|c| c.is_ascii_hexdigit()));
     }
@@ -314,7 +355,7 @@ mod tests {
         let result = AgentIdentity::from_bytes(&[0u8; 32]);
         assert!(result.is_ok());
         let identity = result.unwrap();
-        assert!(identity.did.starts_with("did:kanoniv:"));
+        assert!(identity.did.starts_with("did:agent:"));
         assert_eq!(identity.public_key_bytes.len(), 32);
     }
 
@@ -408,7 +449,7 @@ mod tests {
     fn test_did_is_lowercase_hex() {
         let kp = AgentKeyPair::generate();
         let did = kp.identity().did;
-        let suffix = &did["did:kanoniv:".len()..];
+        let suffix = &did["did:agent:".len()..];
         assert_eq!(suffix, suffix.to_lowercase());
     }
 
@@ -484,5 +525,64 @@ mod tests {
         let json = serde_json::to_string(&svc).unwrap();
         let restored: ServiceEndpoint = serde_json::from_str(&json).unwrap();
         assert_eq!(svc, restored);
+    }
+
+    #[test]
+    fn test_created_at_from_generate() {
+        let kp = AgentKeyPair::generate();
+        let identity = kp.identity();
+        assert!(identity.created_at.is_some());
+        // Should be a valid RFC 3339 timestamp
+        let ts = identity.created_at.as_ref().unwrap();
+        assert!(ts.ends_with('Z'));
+        chrono::DateTime::parse_from_rfc3339(ts).unwrap();
+    }
+
+    #[test]
+    fn test_created_at_in_did_document() {
+        let kp = AgentKeyPair::generate();
+        let identity = kp.identity();
+        let doc = identity.did_document();
+        let vm = &doc["verificationMethod"][0];
+        let created = vm["created"].as_str().unwrap();
+        assert!(created.ends_with('Z'));
+        assert_eq!(created, identity.created_at.as_ref().unwrap());
+    }
+
+    #[test]
+    fn test_created_at_absent_from_bytes() {
+        let identity = AgentIdentity::from_bytes(&[0u8; 32]).unwrap();
+        assert!(identity.created_at.is_none());
+        // DID Document should not have "created" field
+        let doc = identity.did_document();
+        let vm = &doc["verificationMethod"][0];
+        assert!(vm.get("created").is_none());
+    }
+
+    #[test]
+    fn test_from_bytes_with_created_at() {
+        let kp = AgentKeyPair::generate();
+        let secret = kp.secret_bytes();
+        let ts = chrono::Utc::now();
+        let kp2 = AgentKeyPair::from_bytes_with_created_at(&secret, ts);
+        assert_eq!(kp.identity().did, kp2.identity().did);
+        assert!(kp2.identity().created_at.is_some());
+    }
+
+    #[test]
+    fn test_created_at_serialization_roundtrip() {
+        let kp = AgentKeyPair::generate();
+        let identity = kp.identity();
+        let json = serde_json::to_string(&identity).unwrap();
+        let restored: AgentIdentity = serde_json::from_str(&json).unwrap();
+        assert_eq!(identity.created_at, restored.created_at);
+        assert_eq!(identity.did, restored.did);
+    }
+
+    #[test]
+    fn test_created_at_not_in_json_when_none() {
+        let identity = AgentIdentity::from_bytes(&[0u8; 32]).unwrap();
+        let json = serde_json::to_string(&identity).unwrap();
+        assert!(!json.contains("created_at"));
     }
 }

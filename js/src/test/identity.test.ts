@@ -16,7 +16,7 @@ import {
 describe("AgentKeyPair", () => {
   it("generates a keypair with valid DID", () => {
     const kp = generateKeyPair();
-    assert.ok(kp.identity.did.startsWith("did:kanoniv:"));
+    assert.ok(kp.identity.did.startsWith("did:agent:"));
     assert.equal(kp.identity.publicKeyBytes.length, 32);
     assert.equal(kp.secretKey.length, 32);
   });
@@ -36,7 +36,7 @@ describe("AgentKeyPair", () => {
 
   it("DID format is correct", () => {
     const kp = generateKeyPair();
-    const suffix = kp.identity.did.slice("did:kanoniv:".length);
+    const suffix = kp.identity.did.slice("did:agent:".length);
     assert.equal(suffix.length, 32); // 16 bytes = 32 hex chars
     assert.ok(/^[0-9a-f]+$/.test(suffix));
   });

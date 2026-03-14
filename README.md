@@ -1,6 +1,6 @@
 # kanoniv-agent-auth
 
-Cryptographic identity primitives for AI agents. Ed25519 keypairs, `did:kanoniv:` decentralized identifiers, signed message envelopes, and provenance entries.
+Cryptographic identity primitives for AI agents. Ed25519 keypairs, `did:agent:` decentralized identifiers, signed message envelopes, and provenance entries.
 
 One library, three languages, byte-identical outputs.
 
@@ -28,7 +28,7 @@ use kanoniv_agent_auth::{AgentKeyPair, SignedMessage, ProvenanceEntry, ActionTyp
 let keypair = AgentKeyPair::generate();
 let identity = keypair.identity();
 println!("DID: {}", identity.did);
-// did:kanoniv:21fe31dfa154a261626bf854046fd227
+// did:agent:21fe31dfa154a261626bf854046fd227
 
 // Sign a message
 let payload = serde_json::json!({"action": "merge", "entity_id": "abc123"});
@@ -127,14 +127,14 @@ next_entry = ProvenanceEntry.create(
 | Primitive | Description |
 |-----------|-------------|
 | `AgentKeyPair` | Ed25519 keypair generation and persistence |
-| `AgentIdentity` | `did:kanoniv:` DID derivation and DID Documents |
+| `AgentIdentity` | `did:agent:` DID derivation and DID Documents |
 | `SignedMessage` | Canonical JSON signing with nonce and timestamp |
 | `ProvenanceEntry` | Signed audit trail with DAG chaining |
 
 ## DID Format
 
 ```
-did:kanoniv:{hex(sha256(public_key)[..16])}
+did:agent:{hex(sha256(public_key)[..16])}
 ```
 
 32-character hex identifier derived from the SHA-256 hash of the Ed25519 public key, truncated to 128 bits.

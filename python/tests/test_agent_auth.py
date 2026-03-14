@@ -3,14 +3,17 @@
 import json
 import os
 import pytest
-from kanoniv_agent_auth import AgentKeyPair, AgentIdentity, SignedMessage, ProvenanceEntry, ServiceEndpoint
+from kanoniv_agent_auth import (
+    AgentKeyPair, AgentIdentity, SignedMessage, ProvenanceEntry,
+    ServiceEndpoint, Delegation, Invocation, verify_invocation,
+)
 
 
 class TestAgentKeyPair:
     def test_generate(self):
         kp = AgentKeyPair.generate()
         identity = kp.identity()
-        assert identity.did.startswith("did:kanoniv:")
+        assert identity.did.startswith("did:agent:")
         assert len(identity.public_key_bytes) == 32
 
     def test_from_bytes_roundtrip(self):
@@ -203,3 +206,96 @@ class TestCrossLanguageInterop:
         assert rust_message.content_hash() == expected_hash, (
             f"Content hash mismatch: Python={rust_message.content_hash()}, Rust={expected_hash}"
         )
+
+
+class TestCreatedAt:
+    def test_created_at_present_on_generate(self):
+        kp = AgentKeyPair.generate()
+        identity = kp.identity()
+        assert identity.created_at is not None
+        assert identity.created_at.endswith("Z")
+
+    def test_created_at_none_from_bytes(self):
+        identity = AgentIdentity.from_bytes(b"\x00" * 32)
+        assert identity.created_at is None
+
+
+class TestDelegation:
+    def test_root_delegation(self):
+        root = AgentKeyPair.generate()
+        agent = AgentKeyPair.generate()
+
+        d = Delegation.create_root(
+            root, agent.identity().did,
+            '[{"type": "action_scope", "value": ["resolve"]}]',
+        )
+        assert d.issuer_did == root.identity().did
+        assert d.subject_did == agent.identity().did
+        assert d.depth == 0
+
+    def test_chained_delegation(self):
+        root = AgentKeyPair.generate()
+        b = AgentKeyPair.generate()
+        c = AgentKeyPair.generate()
+
+        d1 = Delegation.create_root(root, b.identity().did, "[]")
+        d2 = Delegation.delegate(b, c.identity().did, "[]", d1)
+        assert d2.depth == 1
+
+    def test_invocation_and_verification(self):
+        root = AgentKeyPair.generate()
+        agent = AgentKeyPair.generate()
+
+        d = Delegation.create_root(
+            root, agent.identity().did,
+            '[{"type": "action_scope", "value": ["resolve"]}]',
+        )
+        inv = Invocation.create(agent, "resolve", '{}', d)
+        invoker_did, root_did, chain, depth = verify_invocation(
+            inv, agent.identity(), root.identity(),
+        )
+        assert invoker_did == agent.identity().did
+        assert root_did == root.identity().did
+
+    def test_action_scope_blocks(self):
+        root = AgentKeyPair.generate()
+        agent = AgentKeyPair.generate()
+
+        d = Delegation.create_root(
+            root, agent.identity().did,
+            '[{"type": "action_scope", "value": ["resolve"]}]',
+        )
+        inv = Invocation.create(agent, "merge", '{}', d)
+        with pytest.raises(ValueError, match="Caveat violation"):
+            verify_invocation(inv, agent.identity(), root.identity())
+
+    def test_wrong_root_fails(self):
+        root = AgentKeyPair.generate()
+        agent = AgentKeyPair.generate()
+        fake = AgentKeyPair.generate()
+
+        d = Delegation.create_root(root, agent.identity().did, "[]")
+        inv = Invocation.create(agent, "resolve", '{}', d)
+        with pytest.raises(ValueError):
+            verify_invocation(inv, agent.identity(), fake.identity())
+
+    def test_max_cost_caveat(self):
+        root = AgentKeyPair.generate()
+        agent = AgentKeyPair.generate()
+
+        d = Delegation.create_root(
+            root, agent.identity().did,
+            '[{"type": "max_cost", "value": 5.0}]',
+        )
+        # Under limit - passes
+        inv_ok = Invocation.create(agent, "resolve", '{"cost": 3.0}', d)
+        verify_invocation(inv_ok, agent.identity(), root.identity())
+
+        # Over limit - fails
+        d2 = Delegation.create_root(
+            root, agent.identity().did,
+            '[{"type": "max_cost", "value": 5.0}]',
+        )
+        inv_bad = Invocation.create(agent, "resolve", '{"cost": 10.0}', d2)
+        with pytest.raises(ValueError, match="Caveat violation"):
+            verify_invocation(inv_bad, agent.identity(), root.identity())

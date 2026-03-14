@@ -1,10 +1,10 @@
 //! # kanoniv-agent-auth
 //!
-//! Cryptographic identity primitives for AI agents.
+//! Cryptographic identity and delegation for AI agents.
 //!
-//! This crate provides Ed25519 keypair generation, `did:kanoniv:` decentralized
-//! identifiers, signed message envelopes, and provenance entries for building
-//! trustworthy agent-to-agent communication.
+//! This crate provides Ed25519 keypair generation, `did:agent:` decentralized
+//! identifiers, signed message envelopes, provenance entries, and attenuated
+//! delegation with recursive chain verification.
 //!
 //! ## Quick Start
 //!
@@ -24,38 +24,48 @@
 //! signed.verify(&identity).unwrap();
 //! ```
 //!
-//! ## Provenance
+//! ## Delegation
 //!
 //! ```rust
-//! use kanoniv_agent_auth::{AgentKeyPair, ProvenanceEntry, ActionType};
+//! use kanoniv_agent_auth::{AgentKeyPair, Delegation, Invocation, Caveat, verify_invocation};
 //!
-//! let keypair = AgentKeyPair::generate();
+//! let root = AgentKeyPair::generate();
+//! let agent = AgentKeyPair::generate();
 //!
-//! // Create a signed provenance entry
-//! let entry = ProvenanceEntry::create(
-//!     &keypair,
-//!     ActionType::Merge,
-//!     vec!["entity-1".into(), "entity-2".into()],
-//!     vec![],  // no parents (root entry)
-//!     serde_json::json!({"reason": "duplicate detected"}),
+//! // Root delegates to agent: resolve only, max cost $5
+//! let delegation = Delegation::create_root(
+//!     &root,
+//!     &agent.identity().did,
+//!     vec![
+//!         Caveat::ActionScope(vec!["resolve".into()]),
+//!         Caveat::MaxCost(5.0),
+//!     ],
 //! ).unwrap();
 //!
-//! // Chain entries via content hash
-//! let next = ProvenanceEntry::create(
-//!     &keypair,
-//!     ActionType::Resolve,
-//!     vec!["entity-3".into()],
-//!     vec![entry.content_hash()],  // links to parent
-//!     serde_json::json!({}),
+//! // Agent invokes the delegated power
+//! let invocation = Invocation::create(
+//!     &agent,
+//!     "resolve",
+//!     serde_json::json!({"entity_id": "123", "cost": 2.0}),
+//!     delegation,
 //! ).unwrap();
+//!
+//! // Verify the full chain (no server calls)
+//! let result = verify_invocation(&invocation, &agent.identity(), &root.identity()).unwrap();
+//! assert_eq!(result.root_did, root.identity().did);
 //! ```
 
 pub mod error;
 pub mod identity;
 pub mod signing;
 pub mod provenance;
+pub mod delegation;
 
 pub use error::CryptoError;
 pub use identity::{AgentIdentity, AgentKeyPair, ServiceEndpoint};
 pub use signing::SignedMessage;
 pub use provenance::{ActionType, ProvenanceEntry};
+pub use delegation::{
+    Caveat, Delegation, Invocation, VerificationResult,
+    verify_invocation, verify_delegation_chain,
+};
