@@ -54,12 +54,17 @@ pub enum Caveat {
 /// Delegations form a chain: each delegation optionally references a parent
 /// delegation that granted the issuer their authority. The chain terminates
 /// at the root authority (who needs no parent delegation).
+/// Maximum delegation chain depth to prevent DoS via deeply nested chains.
+pub const MAX_CHAIN_DEPTH: usize = 32;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Delegation {
     /// DID of the agent granting authority
     pub issuer_did: String,
     /// DID of the agent receiving authority
     pub subject_did: String,
+    /// Issuer's public key bytes (for self-verifying chains without key resolver)
+    pub issuer_public_key: Vec<u8>,
     /// Constraints on the delegated authority
     pub caveats: Vec<Caveat>,
     /// Parent delegation that gave the issuer their authority (None for root)
@@ -120,6 +125,16 @@ impl Delegation {
         caveats: Vec<Caveat>,
         parent: Option<Box<Delegation>>,
     ) -> Result<Self, CryptoError> {
+        // Check chain depth limit
+        if let Some(ref p) = parent {
+            if p.depth() >= MAX_CHAIN_DEPTH {
+                return Err(CryptoError::DelegationChainBroken(
+                    format!("chain depth exceeds maximum of {}", MAX_CHAIN_DEPTH),
+                ));
+            }
+        }
+
+        let issuer_identity = issuer_keypair.identity();
         let parent_hash = parent.as_ref().map(|p| p.signed_envelope.content_hash());
 
         let payload = serde_json::json!({
@@ -134,6 +149,7 @@ impl Delegation {
         Ok(Self {
             issuer_did: issuer_did.to_string(),
             subject_did: subject_did.to_string(),
+            issuer_public_key: issuer_identity.public_key_bytes.clone(),
             caveats,
             parent,
             signed_envelope,
@@ -142,10 +158,13 @@ impl Delegation {
 
     /// Get the chain depth (0 for root, 1 for first delegation, etc.)
     pub fn depth(&self) -> usize {
-        match &self.parent {
-            None => 0,
-            Some(parent) => 1 + parent.depth(),
+        let mut depth = 0;
+        let mut current = self;
+        while let Some(ref parent) = current.parent {
+            depth += 1;
+            current = parent;
         }
+        depth
     }
 }
 
@@ -222,10 +241,11 @@ pub struct VerificationResult {
 /// Checks:
 /// 1. Invocation signature is valid for the invoker
 /// 2. Invoker is the subject of the delegation
-/// 3. Each delegation signature is valid for its issuer
+/// 3. **Every** delegation signature is verified (using embedded public keys)
 /// 4. Each delegation's issuer is the subject of its parent
-/// 5. The chain terminates at the expected root authority
-/// 6. All caveats are satisfied for the invoked action
+/// 5. Embedded public keys match their DIDs
+/// 6. The chain terminates at the expected root authority
+/// 7. All caveats are satisfied for the invoked action
 ///
 /// This is the core verification engine. No server calls.
 pub fn verify_invocation(
@@ -243,58 +263,84 @@ pub fn verify_invocation(
         ));
     }
 
-    // 3. Walk the delegation chain
+    // 3. Walk and verify the full delegation chain
     let mut chain = vec![invocation.invoker_did.clone()];
     let mut current = &invocation.delegation;
-    let mut all_caveats: Vec<&Caveat> = Vec::new();
+    let mut all_caveats: Vec<Caveat> = Vec::new();
+    let mut steps = 0usize;
 
     loop {
-        // Collect caveats from this level
-        all_caveats.extend(current.caveats.iter());
+        steps += 1;
+        if steps > MAX_CHAIN_DEPTH {
+            return Err(CryptoError::DelegationChainBroken(
+                format!("chain depth exceeds maximum of {}", MAX_CHAIN_DEPTH),
+            ));
+        }
+
         chain.push(current.issuer_did.clone());
 
-        // Verify this delegation's signature
-        // The issuer of the current delegation signed it
-        let issuer_identity = if current.issuer_did == root_identity.did {
-            root_identity.clone()
-        } else if let Some(ref parent) = current.parent {
-            // For intermediate delegations, the issuer is the subject of the parent.
-            // We need their public key. Since we're verifying the chain from leaf to root,
-            // we verify the signature against the identity embedded in the chain.
-            // The parent's subject_did should match this delegation's issuer_did.
-            if parent.subject_did != current.issuer_did {
+        // Reconstruct issuer identity from embedded public key
+        let issuer_identity = AgentIdentity::from_bytes(&current.issuer_public_key)
+            .map_err(|_| CryptoError::DelegationChainBroken(
+                format!("invalid embedded public key for '{}'", current.issuer_did),
+            ))?;
+
+        // Verify the embedded public key matches the claimed DID
+        if issuer_identity.did != current.issuer_did {
+            return Err(CryptoError::DelegationChainBroken(
+                format!(
+                    "embedded public key produces DID '{}' but delegation claims '{}'",
+                    issuer_identity.did, current.issuer_did
+                ),
+            ));
+        }
+
+        // Verify this delegation's signature using the embedded public key
+        current.signed_envelope.verify(&issuer_identity)?;
+
+        // Extract caveats from the SIGNED PAYLOAD (not outer fields) to prevent tampering
+        if let Some(signed_caveats) = current.signed_envelope.payload.get("caveats") {
+            if let Ok(caveats) = serde_json::from_value::<Vec<Caveat>>(signed_caveats.clone()) {
+                all_caveats.extend(caveats);
+            }
+        }
+
+        // Check chain linkage
+        if current.issuer_did == root_identity.did {
+            // Reached root - verify it matches the expected root identity
+            if issuer_identity.public_key_bytes != root_identity.public_key_bytes {
                 return Err(CryptoError::DelegationChainBroken(
-                    format!(
-                        "delegation issuer '{}' is not the subject of parent delegation '{}'",
-                        current.issuer_did, parent.subject_did
-                    ),
+                    "root public key mismatch".into(),
                 ));
             }
-            // We can't verify intermediate signatures without the public keys.
-            // For now, we verify the root and leaf signatures, and check chain linkage.
-            // Full intermediate verification requires a key resolver.
-            // Skip to parent.
-            current = parent;
-            continue;
-        } else {
-            // Root delegation - issuer should be the root authority
-            if current.issuer_did != root_identity.did {
+            break;
+        }
+
+        // Not root - must have a parent
+        match &current.parent {
+            Some(parent) => {
+                if parent.subject_did != current.issuer_did {
+                    return Err(CryptoError::DelegationChainBroken(
+                        format!(
+                            "delegation issuer '{}' is not the subject of parent delegation '{}'",
+                            current.issuer_did, parent.subject_did
+                        ),
+                    ));
+                }
+                current = parent;
+            }
+            None => {
                 return Err(CryptoError::DelegationChainBroken(
                     format!(
-                        "chain root '{}' does not match expected root '{}'",
+                        "chain terminates at '{}', expected root '{}'",
                         current.issuer_did, root_identity.did
                     ),
                 ));
             }
-            root_identity.clone()
-        };
-
-        // Verify root delegation signature
-        current.signed_envelope.verify(&issuer_identity)?;
-        break;
+        }
     }
 
-    // 4. Check all caveats against the invocation
+    // 4. Check all caveats (from signed payloads) against the invocation
     let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
     for caveat in &all_caveats {
         check_caveat(caveat, &invocation.action, &invocation.args, &now)?;
@@ -310,20 +356,50 @@ pub fn verify_invocation(
 }
 
 /// Verify a delegation chain without an invocation (just check the chain is valid).
+///
+/// Verifies every signature in the chain using embedded public keys.
 pub fn verify_delegation_chain(
     delegation: &Delegation,
     root_identity: &AgentIdentity,
 ) -> Result<Vec<String>, CryptoError> {
     let mut chain = Vec::new();
     let mut current = delegation;
+    let mut steps = 0usize;
 
     loop {
+        steps += 1;
+        if steps > MAX_CHAIN_DEPTH {
+            return Err(CryptoError::DelegationChainBroken(
+                format!("chain depth exceeds maximum of {}", MAX_CHAIN_DEPTH),
+            ));
+        }
+
         chain.push(current.subject_did.clone());
         chain.push(current.issuer_did.clone());
 
+        // Verify signature using embedded public key
+        let issuer_identity = AgentIdentity::from_bytes(&current.issuer_public_key)
+            .map_err(|_| CryptoError::DelegationChainBroken(
+                format!("invalid embedded public key for '{}'", current.issuer_did),
+            ))?;
+
+        if issuer_identity.did != current.issuer_did {
+            return Err(CryptoError::DelegationChainBroken(
+                format!(
+                    "embedded public key produces DID '{}' but delegation claims '{}'",
+                    issuer_identity.did, current.issuer_did
+                ),
+            ));
+        }
+
+        current.signed_envelope.verify(&issuer_identity)?;
+
         if current.issuer_did == root_identity.did {
-            // Root - verify signature
-            current.signed_envelope.verify(root_identity)?;
+            if issuer_identity.public_key_bytes != root_identity.public_key_bytes {
+                return Err(CryptoError::DelegationChainBroken(
+                    "root public key mismatch".into(),
+                ));
+            }
             break;
         }
 
@@ -347,7 +423,6 @@ pub fn verify_delegation_chain(
         }
     }
 
-    // Deduplicate chain (subject/issuer pairs overlap)
     chain.dedup();
     Ok(chain)
 }
@@ -374,21 +449,33 @@ fn check_caveat(
             }
         }
         Caveat::MaxCost(max) => {
-            if let Some(cost) = args.get("cost").and_then(|v| v.as_f64()) {
-                if cost > *max {
+            match args.get("cost").and_then(|v| v.as_f64()) {
+                Some(cost) if cost > *max => {
                     return Err(CryptoError::CaveatViolation(
                         format!("cost {} exceeds max {}", cost, max),
                     ));
                 }
+                None => {
+                    return Err(CryptoError::CaveatViolation(
+                        "max_cost caveat requires 'cost' field in args".into(),
+                    ));
+                }
+                _ => {}
             }
         }
         Caveat::Resource(pattern) => {
-            if let Some(resource) = args.get("resource").and_then(|v| v.as_str()) {
-                if !matches_glob(pattern, resource) {
+            match args.get("resource").and_then(|v| v.as_str()) {
+                Some(resource) if !matches_glob(pattern, resource) => {
                     return Err(CryptoError::CaveatViolation(
                         format!("resource '{}' does not match pattern '{}'", resource, pattern),
                     ));
                 }
+                None => {
+                    return Err(CryptoError::CaveatViolation(
+                        "resource caveat requires 'resource' field in args".into(),
+                    ));
+                }
+                _ => {}
             }
         }
         Caveat::Context { key, value } => {
@@ -1005,5 +1092,136 @@ mod tests {
         assert!(matches_glob("exact", "exact"));
         assert!(!matches_glob("exact", "other"));
         assert!(matches_glob("*", "anything"));
+    }
+
+    #[test]
+    fn test_max_cost_missing_field_fails() {
+        let root = keypair();
+        let agent_b = keypair();
+
+        let delegation = Delegation::create_root(
+            &root,
+            &agent_b.identity().did,
+            vec![Caveat::MaxCost(5.0)],
+        )
+        .unwrap();
+
+        // No cost field in args - should fail (not silently pass)
+        let invocation = Invocation::create(
+            &agent_b,
+            "resolve",
+            serde_json::json!({}),
+            delegation,
+        )
+        .unwrap();
+
+        let result = verify_invocation(&invocation, &agent_b.identity(), &root.identity());
+        assert!(matches!(result, Err(CryptoError::CaveatViolation(_))));
+    }
+
+    #[test]
+    fn test_resource_missing_field_fails() {
+        let root = keypair();
+        let agent_b = keypair();
+
+        let delegation = Delegation::create_root(
+            &root,
+            &agent_b.identity().did,
+            vec![Caveat::Resource("entity:*".into())],
+        )
+        .unwrap();
+
+        // No resource field in args - should fail
+        let invocation = Invocation::create(
+            &agent_b,
+            "resolve",
+            serde_json::json!({}),
+            delegation,
+        )
+        .unwrap();
+
+        let result = verify_invocation(&invocation, &agent_b.identity(), &root.identity());
+        assert!(matches!(result, Err(CryptoError::CaveatViolation(_))));
+    }
+
+    #[test]
+    fn test_embedded_public_key_present() {
+        let root = keypair();
+        let agent_b = keypair();
+
+        let delegation = Delegation::create_root(
+            &root,
+            &agent_b.identity().did,
+            vec![],
+        )
+        .unwrap();
+
+        assert_eq!(delegation.issuer_public_key, root.identity().public_key_bytes);
+    }
+
+    #[test]
+    fn test_tampered_delegation_caveats_detected() {
+        let root = keypair();
+        let agent_b = keypair();
+
+        let mut delegation = Delegation::create_root(
+            &root,
+            &agent_b.identity().did,
+            vec![Caveat::ActionScope(vec!["resolve".into()])],
+        )
+        .unwrap();
+
+        // Tamper with outer caveats to widen scope
+        delegation.caveats = vec![Caveat::ActionScope(vec!["resolve".into(), "merge".into()])];
+
+        let invocation = Invocation::create(
+            &agent_b,
+            "merge",
+            serde_json::json!({}),
+            delegation,
+        )
+        .unwrap();
+
+        // Should fail because verification reads caveats from signed payload,
+        // not from the tampered outer field
+        let result = verify_invocation(&invocation, &agent_b.identity(), &root.identity());
+        assert!(matches!(result, Err(CryptoError::CaveatViolation(_))));
+    }
+
+    #[test]
+    fn test_intermediate_signature_verified() {
+        let root = keypair();
+        let agent_b = keypair();
+        let agent_c = keypair();
+
+        let d1 = Delegation::create_root(
+            &root,
+            &agent_b.identity().did,
+            vec![Caveat::ActionScope(vec!["resolve".into()])],
+        )
+        .unwrap();
+
+        let mut d2 = Delegation::delegate(
+            &agent_b,
+            &agent_c.identity().did,
+            vec![],
+            d1,
+        )
+        .unwrap();
+
+        // Tamper with d2's signed_envelope signature (corrupt it)
+        d2.signed_envelope.signature = "00".repeat(64);
+
+        let invocation = Invocation::create(
+            &agent_c,
+            "resolve",
+            serde_json::json!({}),
+            d2,
+        )
+        .unwrap();
+
+        // Should fail because B's delegation signature is now verified
+        let result = verify_invocation(&invocation, &agent_c.identity(), &root.identity());
+        assert!(result.is_err());
     }
 }

@@ -1,4 +1,5 @@
 import type { AgentIdentity, AgentKeyPair } from "./identity.js";
+import { identityFromBytes, bytesToHex } from "./identity.js";
 import {
   type SignedMessage,
   signMessage,
@@ -6,6 +7,9 @@ import {
   contentHash,
 } from "./signing.js";
 import { CryptoError } from "./error.js";
+
+/** Maximum delegation chain depth to prevent DoS. */
+export const MAX_CHAIN_DEPTH = 32;
 
 /** A constraint on delegated authority. */
 export type Caveat =
@@ -20,6 +24,8 @@ export type Caveat =
 export interface Delegation {
   issuer_did: string;
   subject_did: string;
+  /** Issuer's public key bytes (hex) for self-verifying chains. */
+  issuer_public_key: string;
   caveats: Caveat[];
   parent: Delegation | null;
   signed_envelope: SignedMessage;
@@ -60,6 +66,7 @@ export function createRootDelegation(
   return {
     issuer_did: issuerDid,
     subject_did: subjectDid,
+    issuer_public_key: bytesToHex(issuerKeypair.identity.publicKeyBytes),
     caveats,
     parent: null,
     signed_envelope: signedEnvelope,
@@ -95,6 +102,7 @@ export function delegateAuthority(
   return {
     issuer_did: issuerDid,
     subject_did: subjectDid,
+    issuer_public_key: bytesToHex(issuerKeypair.identity.publicKeyBytes),
     caveats: allCaveats,
     parent,
     signed_envelope: signedEnvelope,
@@ -134,7 +142,7 @@ export function createInvocation(
   };
 }
 
-/** Verify an invocation's entire authority chain. No server calls. */
+/** Verify an invocation's entire authority chain. Every signature checked. */
 export function verifyInvocation(
   invocation: Invocation,
   invokerIdentity: AgentIdentity,
@@ -151,18 +159,56 @@ export function verifyInvocation(
     );
   }
 
-  // 3. Walk the delegation chain
+  // 3. Walk and verify the full delegation chain
   const chain: string[] = [invocation.invoker_did];
   const allCaveats: Caveat[] = [];
   let current: Delegation | null = invocation.delegation;
+  let steps = 0;
 
   while (current !== null) {
-    allCaveats.push(...current.caveats);
+    steps++;
+    if (steps > MAX_CHAIN_DEPTH) {
+      throw new CryptoError(
+        "SIGNATURE_INVALID",
+        `Chain depth exceeds maximum of ${MAX_CHAIN_DEPTH}`,
+      );
+    }
+
     chain.push(current.issuer_did);
 
+    // Reconstruct identity from embedded public key and verify DID matches
+    const issuerPkBytes = hexToUint8Array(current.issuer_public_key);
+    const issuerIdentity = identityFromBytes(issuerPkBytes);
+
+    if (issuerIdentity.did !== current.issuer_did) {
+      throw new CryptoError(
+        "SIGNATURE_INVALID",
+        `Embedded public key produces DID '${issuerIdentity.did}' but delegation claims '${current.issuer_did}'`,
+      );
+    }
+
+    // Verify this delegation's signature
+    verifyMessage(current.signed_envelope, issuerIdentity);
+
+    // Extract caveats from SIGNED PAYLOAD (not outer fields)
+    const signedPayload = current.signed_envelope.payload as Record<
+      string,
+      unknown
+    >;
+    if (Array.isArray(signedPayload.caveats)) {
+      allCaveats.push(...(signedPayload.caveats as Caveat[]));
+    }
+
     if (current.issuer_did === rootIdentity.did) {
-      // Root - verify signature
-      verifyMessage(current.signed_envelope, rootIdentity);
+      // Verify root public key matches
+      if (
+        bytesToHex(issuerPkBytes) !== bytesToHex(rootIdentity.publicKeyBytes)
+      ) {
+        throw new CryptoError(
+          "SIGNATURE_INVALID",
+          "Root public key mismatch",
+        );
+      }
       current = null;
     } else if (current.parent) {
       if (current.parent.subject_did !== current.issuer_did) {
@@ -180,7 +226,7 @@ export function verifyInvocation(
     }
   }
 
-  // 4. Check caveats
+  // 4. Check caveats from signed payloads
   const now = new Date().toISOString().replace(/(\.\d{3})\d*Z$/, "$1Z");
   for (const caveat of allCaveats) {
     checkCaveat(caveat, invocation.action, invocation.args, now);
@@ -192,6 +238,14 @@ export function verifyInvocation(
     chain,
     depth: chain.length - 1,
   };
+}
+
+function hexToUint8Array(hex: string): Uint8Array {
+  const bytes = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < bytes.length; i++) {
+    bytes[i] = parseInt(hex.substring(i * 2, i * 2 + 2), 16);
+  }
+  return bytes;
 }
 
 function checkCaveat(
@@ -219,7 +273,13 @@ function checkCaveat(
       break;
     case "max_cost": {
       const cost = args.cost;
-      if (typeof cost === "number" && cost > caveat.value) {
+      if (typeof cost !== "number") {
+        throw new CryptoError(
+          "SIGNATURE_INVALID",
+          "Caveat violation: max_cost caveat requires 'cost' field in args",
+        );
+      }
+      if (cost > caveat.value) {
         throw new CryptoError(
           "SIGNATURE_INVALID",
           `Caveat violation: cost ${cost} exceeds max ${caveat.value}`,
@@ -229,7 +289,13 @@ function checkCaveat(
     }
     case "resource": {
       const resource = args.resource;
-      if (typeof resource === "string" && !matchesGlob(caveat.value, resource)) {
+      if (typeof resource !== "string") {
+        throw new CryptoError(
+          "SIGNATURE_INVALID",
+          "Caveat violation: resource caveat requires 'resource' field in args",
+        );
+      }
+      if (!matchesGlob(caveat.value, resource)) {
         throw new CryptoError(
           "SIGNATURE_INVALID",
           `Caveat violation: resource '${resource}' does not match '${caveat.value}'`,
