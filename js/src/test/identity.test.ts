@@ -6,6 +6,7 @@ import {
   computeDid,
   identityFromBytes,
   didDocument,
+  didDocumentWithServices,
   hexToBytes,
   bytesToHex,
 } from "../index.js";
@@ -69,6 +70,49 @@ describe("DID Document", () => {
     assert.equal(vm["type"], "Ed25519VerificationKey2020");
     assert.equal(vm["controller"], kp.identity.did);
     assert.ok(typeof vm["publicKeyBase64"] === "string");
+  });
+
+  it("has no service field without services", () => {
+    const kp = generateKeyPair();
+    const doc = didDocument(kp.identity);
+    assert.equal(doc["service"], undefined);
+  });
+
+  it("includes service endpoints", () => {
+    const kp = generateKeyPair();
+    const doc = didDocumentWithServices(kp.identity, [
+      {
+        id: "#messaging",
+        serviceType: "AgentMessaging",
+        endpoint: "https://example.com/agent/msg",
+      },
+      {
+        id: "#resolve",
+        serviceType: "KanonivResolve",
+        endpoint: "https://api.kanoniv.com/v1/resolve",
+      },
+    ]);
+
+    const svc = doc["service"] as Record<string, unknown>[];
+    assert.equal(svc.length, 2);
+    assert.equal(svc[0]["id"], `${kp.identity.did}#messaging`);
+    assert.equal(svc[0]["type"], "AgentMessaging");
+    assert.equal(svc[0]["serviceEndpoint"], "https://example.com/agent/msg");
+    assert.equal(svc[1]["id"], `${kp.identity.did}#resolve`);
+  });
+
+  it("preserves full URI service IDs", () => {
+    const kp = generateKeyPair();
+    const doc = didDocumentWithServices(kp.identity, [
+      {
+        id: "https://example.com/services/agent-1",
+        serviceType: "AgentMessaging",
+        endpoint: "https://example.com/agent/msg",
+      },
+    ]);
+
+    const svc = doc["service"] as Record<string, unknown>[];
+    assert.equal(svc[0]["id"], "https://example.com/services/agent-1");
   });
 });
 

@@ -21,6 +21,30 @@ pub struct AgentIdentity {
     pub public_key_bytes: Vec<u8>,
 }
 
+/// A service endpoint for a DID Document (W3C DID Core specification).
+///
+/// Describes how to communicate with or reach the agent.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ServiceEndpoint {
+    /// Fragment ID (e.g. "#messaging") or full URI. Fragments are auto-prefixed with the DID.
+    pub id: String,
+    /// Service type (e.g. "AgentMessaging", "KanonivResolve", "DIDCommMessaging")
+    pub service_type: String,
+    /// The endpoint URL
+    pub endpoint: String,
+}
+
+impl ServiceEndpoint {
+    /// Create a new service endpoint.
+    pub fn new(id: impl Into<String>, service_type: impl Into<String>, endpoint: impl Into<String>) -> Self {
+        Self {
+            id: id.into(),
+            service_type: service_type.into(),
+            endpoint: endpoint.into(),
+        }
+    }
+}
+
 impl AgentKeyPair {
     /// Generate a new random Ed25519 keypair.
     pub fn generate() -> Self {
@@ -82,13 +106,21 @@ impl AgentIdentity {
         VerifyingKey::from_bytes(&bytes).map_err(|_| CryptoError::InvalidPublicKey)
     }
 
-    /// Generate a W3C DID Document for this identity.
+    /// Generate a W3C DID Document for this identity (no service endpoints).
     pub fn did_document(&self) -> serde_json::Value {
+        self.did_document_with_services(&[])
+    }
+
+    /// Generate a W3C DID Document with optional service endpoints.
+    ///
+    /// Service endpoints allow agent frameworks to discover how to
+    /// communicate with this agent (messaging, API, coordination).
+    pub fn did_document_with_services(&self, services: &[ServiceEndpoint]) -> serde_json::Value {
         let pk_base64 = base64::Engine::encode(
             &base64::engine::general_purpose::STANDARD,
             &self.public_key_bytes,
         );
-        serde_json::json!({
+        let mut doc = serde_json::json!({
             "@context": ["https://www.w3.org/ns/did/v1"],
             "id": self.did,
             "verificationMethod": [{
@@ -99,7 +131,28 @@ impl AgentIdentity {
             }],
             "authentication": [format!("{}#key-1", self.did)],
             "assertionMethod": [format!("{}#key-1", self.did)]
-        })
+        });
+
+        if !services.is_empty() {
+            let svc_array: Vec<serde_json::Value> = services
+                .iter()
+                .map(|s| {
+                    let id = if s.id.starts_with('#') {
+                        format!("{}{}", self.did, s.id)
+                    } else {
+                        s.id.clone()
+                    };
+                    serde_json::json!({
+                        "id": id,
+                        "type": s.service_type,
+                        "serviceEndpoint": s.endpoint,
+                    })
+                })
+                .collect();
+            doc["service"] = serde_json::Value::Array(svc_array);
+        }
+
+        doc
     }
 
     /// Compute the DID string from public key bytes.
@@ -286,5 +339,79 @@ mod tests {
         let did = kp.identity().did;
         let suffix = &did["did:kanoniv:".len()..];
         assert_eq!(suffix, suffix.to_lowercase());
+    }
+
+    #[test]
+    fn test_did_document_no_services_has_no_service_field() {
+        let kp = AgentKeyPair::generate();
+        let doc = kp.identity().did_document();
+        assert!(doc.get("service").is_none());
+    }
+
+    #[test]
+    fn test_did_document_with_services() {
+        let kp = AgentKeyPair::generate();
+        let identity = kp.identity();
+        let services = vec![
+            ServiceEndpoint::new("#messaging", "AgentMessaging", "https://example.com/agent/msg"),
+            ServiceEndpoint::new("#resolve", "KanonivResolve", "https://api.kanoniv.com/v1/resolve"),
+        ];
+        let doc = identity.did_document_with_services(&services);
+
+        let svc = doc["service"].as_array().unwrap();
+        assert_eq!(svc.len(), 2);
+
+        // Fragment IDs get prefixed with the DID
+        assert_eq!(
+            svc[0]["id"].as_str().unwrap(),
+            format!("{}#messaging", identity.did)
+        );
+        assert_eq!(svc[0]["type"].as_str().unwrap(), "AgentMessaging");
+        assert_eq!(
+            svc[0]["serviceEndpoint"].as_str().unwrap(),
+            "https://example.com/agent/msg"
+        );
+
+        assert_eq!(
+            svc[1]["id"].as_str().unwrap(),
+            format!("{}#resolve", identity.did)
+        );
+        assert_eq!(svc[1]["type"].as_str().unwrap(), "KanonivResolve");
+    }
+
+    #[test]
+    fn test_did_document_with_full_uri_service_id() {
+        let kp = AgentKeyPair::generate();
+        let identity = kp.identity();
+        let services = vec![
+            ServiceEndpoint::new(
+                "https://example.com/services/agent-1",
+                "AgentMessaging",
+                "https://example.com/agent/msg",
+            ),
+        ];
+        let doc = identity.did_document_with_services(&services);
+
+        let svc = doc["service"].as_array().unwrap();
+        // Full URI is NOT prefixed with DID
+        assert_eq!(
+            svc[0]["id"].as_str().unwrap(),
+            "https://example.com/services/agent-1"
+        );
+    }
+
+    #[test]
+    fn test_did_document_empty_services_no_service_field() {
+        let kp = AgentKeyPair::generate();
+        let doc = kp.identity().did_document_with_services(&[]);
+        assert!(doc.get("service").is_none());
+    }
+
+    #[test]
+    fn test_service_endpoint_serialization() {
+        let svc = ServiceEndpoint::new("#messaging", "AgentMessaging", "https://example.com");
+        let json = serde_json::to_string(&svc).unwrap();
+        let restored: ServiceEndpoint = serde_json::from_str(&json).unwrap();
+        assert_eq!(svc, restored);
     }
 }

@@ -93,10 +93,28 @@ function base64Encode(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
-/** Generate a W3C DID Document for an identity. */
+/** A service endpoint for a DID Document (W3C DID Core). */
+export interface ServiceEndpoint {
+  /** Fragment ID (e.g. "#messaging") or full URI. Fragments are auto-prefixed with the DID. */
+  id: string;
+  /** Service type (e.g. "AgentMessaging", "KanonivResolve") */
+  serviceType: string;
+  /** The endpoint URL */
+  endpoint: string;
+}
+
+/** Generate a W3C DID Document for an identity (no service endpoints). */
 export function didDocument(identity: AgentIdentity): Record<string, unknown> {
+  return didDocumentWithServices(identity, []);
+}
+
+/** Generate a W3C DID Document with optional service endpoints. */
+export function didDocumentWithServices(
+  identity: AgentIdentity,
+  services: ServiceEndpoint[],
+): Record<string, unknown> {
   const pkBase64 = base64Encode(identity.publicKeyBytes);
-  return {
+  const doc: Record<string, unknown> = {
     "@context": ["https://www.w3.org/ns/did/v1"],
     id: identity.did,
     verificationMethod: [
@@ -110,4 +128,14 @@ export function didDocument(identity: AgentIdentity): Record<string, unknown> {
     authentication: [`${identity.did}#key-1`],
     assertionMethod: [`${identity.did}#key-1`],
   };
+
+  if (services.length > 0) {
+    doc.service = services.map((s) => ({
+      id: s.id.startsWith("#") ? `${identity.did}${s.id}` : s.id,
+      type: s.serviceType,
+      serviceEndpoint: s.endpoint,
+    }));
+  }
+
+  return doc;
 }

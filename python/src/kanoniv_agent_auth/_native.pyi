@@ -47,6 +47,24 @@ class AgentIdentity:
         """Generate a W3C DID Document as JSON string."""
         ...
 
+    def did_document_with_services(self, services: list[PyServiceEndpoint]) -> str:
+        """Generate a W3C DID Document with service endpoints."""
+        ...
+
+class PyServiceEndpoint:
+    """A service endpoint for DID Documents."""
+
+    def __init__(self, id: str, service_type: str, endpoint: str) -> None: ...
+
+    @property
+    def id(self) -> str: ...
+
+    @property
+    def service_type(self) -> str: ...
+
+    @property
+    def endpoint(self) -> str: ...
+
 class SignedMessage:
     """A cryptographically signed message envelope."""
 

@@ -3,7 +3,7 @@
 import json
 import os
 import pytest
-from kanoniv_agent_auth import AgentKeyPair, AgentIdentity, SignedMessage, ProvenanceEntry
+from kanoniv_agent_auth import AgentKeyPair, AgentIdentity, SignedMessage, ProvenanceEntry, ServiceEndpoint
 
 
 class TestAgentKeyPair:
@@ -47,6 +47,34 @@ class TestAgentIdentity:
         doc = json.loads(identity.did_document())
         assert doc["id"] == identity.did
         assert doc["verificationMethod"][0]["type"] == "Ed25519VerificationKey2020"
+
+    def test_did_document_no_services_has_no_service_field(self):
+        kp = AgentKeyPair.generate()
+        doc = json.loads(kp.identity().did_document())
+        assert "service" not in doc
+
+    def test_did_document_with_services(self):
+        kp = AgentKeyPair.generate()
+        identity = kp.identity()
+        services = [
+            ServiceEndpoint("#messaging", "AgentMessaging", "https://example.com/agent/msg"),
+            ServiceEndpoint("#resolve", "KanonivResolve", "https://api.kanoniv.com/v1/resolve"),
+        ]
+        doc = json.loads(identity.did_document_with_services(services))
+        assert len(doc["service"]) == 2
+        assert doc["service"][0]["id"] == f"{identity.did}#messaging"
+        assert doc["service"][0]["type"] == "AgentMessaging"
+        assert doc["service"][0]["serviceEndpoint"] == "https://example.com/agent/msg"
+        assert doc["service"][1]["id"] == f"{identity.did}#resolve"
+
+    def test_did_document_full_uri_service_id(self):
+        kp = AgentKeyPair.generate()
+        identity = kp.identity()
+        services = [
+            ServiceEndpoint("https://example.com/svc/1", "AgentMessaging", "https://example.com/msg"),
+        ]
+        doc = json.loads(identity.did_document_with_services(services))
+        assert doc["service"][0]["id"] == "https://example.com/svc/1"
 
 
 class TestSignedMessage:

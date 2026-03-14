@@ -56,6 +56,6 @@ pub mod signing;
 pub mod provenance;
 
 pub use error::CryptoError;
-pub use identity::{AgentIdentity, AgentKeyPair};
+pub use identity::{AgentIdentity, AgentKeyPair, ServiceEndpoint};
 pub use signing::SignedMessage;
 pub use provenance::{ActionType, ProvenanceEntry};

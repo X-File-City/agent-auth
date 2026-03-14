@@ -5,6 +5,7 @@ from kanoniv_agent_auth._native import (
     AgentIdentity,
     SignedMessage,
     ProvenanceEntry,
+    PyServiceEndpoint as ServiceEndpoint,
 )
 
 __all__ = [
@@ -12,4 +13,5 @@ __all__ = [
     "AgentIdentity",
     "SignedMessage",
     "ProvenanceEntry",
+    "ServiceEndpoint",
 ]

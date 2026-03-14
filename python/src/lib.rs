@@ -86,8 +86,44 @@ impl AgentIdentity {
         serde_json::to_string_pretty(&self.inner.did_document()).unwrap()
     }
 
+    /// Generate a W3C DID Document with service endpoints.
+    ///
+    /// Each service is a dict with keys: id, service_type, endpoint.
+    /// Fragment IDs (starting with #) are auto-prefixed with the DID.
+    fn did_document_with_services(&self, services: Vec<PyServiceEndpoint>) -> String {
+        let svc: Vec<kanoniv_agent_auth::ServiceEndpoint> = services
+            .into_iter()
+            .map(|s| kanoniv_agent_auth::ServiceEndpoint::new(s.id, s.service_type, s.endpoint))
+            .collect();
+        serde_json::to_string_pretty(&self.inner.did_document_with_services(&svc)).unwrap()
+    }
+
     fn __repr__(&self) -> String {
         format!("AgentIdentity(did='{}')", self.inner.did)
+    }
+}
+
+/// A service endpoint for DID Documents.
+#[pyclass(frozen)]
+#[derive(Clone)]
+struct PyServiceEndpoint {
+    #[pyo3(get)]
+    id: String,
+    #[pyo3(get)]
+    service_type: String,
+    #[pyo3(get)]
+    endpoint: String,
+}
+
+#[pymethods]
+impl PyServiceEndpoint {
+    #[new]
+    fn new(id: String, service_type: String, endpoint: String) -> Self {
+        Self { id, service_type, endpoint }
+    }
+
+    fn __repr__(&self) -> String {
+        format!("ServiceEndpoint(id='{}', type='{}')", self.id, self.service_type)
     }
 }
 
@@ -277,5 +313,6 @@ fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<AgentIdentity>()?;
     m.add_class::<SignedMessage>()?;
     m.add_class::<ProvenanceEntry>()?;
+    m.add_class::<PyServiceEndpoint>()?;
     Ok(())
 }
