@@ -1,44 +1,48 @@
-"""Four demo agents for the Trustworthy Multi-Agent AI hackathon.
+"""Demo agents for the Trustworthy Multi-Agent AI platform.
 
 Each agent has:
 - A cryptographic DID identity (Ed25519)
 - A role with specific capabilities
-- An LLM backend (Qwen3 via Ollama)
+- An LLM backend (Claude via Anthropic API)
 - Signed message creation for all outputs
 """
 
 import json
+import os
 import requests
 from identity import AgentIdentity, KeyPair, SignedMessage
 from provenance import ProvenanceEntry, ProvenanceGraph
 from memory import SharedMemory
 
-OLLAMA_URL = "http://localhost:11434/api/generate"
-MODEL = "qwen3:0.6b"
+ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
+ANTHROPIC_URL = "https://api.anthropic.com/v1/messages"
+MODEL = "claude-haiku-4-5-20251001"
 
 
 def llm_generate(prompt: str, system: str = "", max_tokens: int = 300) -> str:
-    """Call Ollama for text generation."""
-    prompt = "/no_think\n" + prompt
+    """Call Claude via Anthropic API."""
+    headers = {
+        "x-api-key": ANTHROPIC_API_KEY,
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json",
+    }
     payload = {
         "model": MODEL,
-        "prompt": prompt,
-        "stream": False,
-        "options": {"temperature": 0.7, "num_predict": max_tokens},
+        "max_tokens": max_tokens,
+        "messages": [{"role": "user", "content": prompt}],
     }
     if system:
         payload["system"] = system
+
     try:
-        resp = requests.post(OLLAMA_URL, json=payload, timeout=120)
+        resp = requests.post(ANTHROPIC_URL, headers=headers, json=payload, timeout=30)
         resp.raise_for_status()
         data = resp.json()
-        result = data["response"].strip()
-        # Strip <think>...</think> blocks that Qwen3 sometimes adds despite /no_think
-        import re
-        result = re.sub(r"<think>.*?</think>", "", result, flags=re.DOTALL).strip()
-        # Track token usage
-        prompt_tokens = data.get("prompt_eval_count", 0)
-        completion_tokens = data.get("eval_count", 0)
+        result = data["content"][0]["text"].strip()
+
+        usage = data.get("usage", {})
+        prompt_tokens = usage.get("input_tokens", 0)
+        completion_tokens = usage.get("output_tokens", 0)
         llm_generate.last_usage = {
             "prompt_tokens": prompt_tokens,
             "completion_tokens": completion_tokens,

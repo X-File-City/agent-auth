@@ -114,6 +114,34 @@
         .msg-treatment { border-left: 3px solid var(--success); }
         .msg-discharge { border-left: 3px solid var(--relationship); }
 
+        /* Finance agent colors */
+        .dot-cfo { background: #FF6B6B !important; }
+        .dot-trading { background: var(--success) !important; }
+        .dot-payments { background: var(--info) !important; }
+        .dot-audit { background: var(--warning) !important; }
+        .color-cfo { color: #FF6B6B !important; }
+        .color-trading { color: var(--success) !important; }
+        .color-payments { color: var(--info) !important; }
+        .color-audit { color: var(--warning) !important; }
+        .msg-cfo { border-left: 3px solid #FF6B6B; }
+        .msg-trading { border-left: 3px solid var(--success); }
+        .msg-payments { border-left: 3px solid var(--info); }
+        .msg-audit { border-left: 3px solid var(--warning); }
+
+        /* Revoked agent card */
+        .agent-card.revoked {
+            opacity: 0.5;
+            border-color: var(--danger) !important;
+            position: relative;
+        }
+        .agent-card.revoked::after {
+            content: "REVOKED";
+            position: absolute; top: 6px; right: 8px;
+            font-size: 8px; font-weight: 800; letter-spacing: 1px;
+            color: var(--danger); background: rgba(248,113,113,0.15);
+            padding: 1px 6px; border-radius: 3px;
+        }
+
         /* Delegation cards */
         .deleg-card {
             background: var(--bg); border: 1px solid var(--border);
@@ -438,13 +466,11 @@
         </div>
         <div class="header-actions">
             <div style="display:flex;gap:2px;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:2px">
+                <button class="mode-btn{% if mode == 'finance' %} active{% endif %}" onclick="switchMode('finance')" id="mode-finance">Finance</button>
                 <button class="mode-btn{% if mode == 'hospital' %} active{% endif %}" onclick="switchMode('hospital')" id="mode-hospital">Hospital</button>
                 <button class="mode-btn{% if mode == 'build' %} active{% endif %}" onclick="switchMode('build')" id="mode-build">Build</button>
                 <button class="mode-btn{% if mode == 'debate' %} active{% endif %}" onclick="switchMode('debate')" id="mode-debate">Debate</button>
             </div>
-            <button class="btn-secondary" onclick="discoverAgents()">Discover Agents</button>
-            <button class="btn-secondary" onclick="publishToNostr()">Publish to Nostr</button>
-            <button class="btn-danger" onclick="runTamperDemo()">Tamper Demo</button>
         </div>
     </div>
 
@@ -453,10 +479,10 @@
         <div class="sidebar">
             <div class="section-label">Agent Registry</div>
             {% for agent in agents %}
-            <div class="agent-card" onclick="showDIDDocument('{{ agent.name }}')">
+            <div class="agent-card" id="agent-card-{{ agent.name | lower | replace(' ', '-') | replace('(', '') | replace(')', '') }}" onclick="showDIDDocument('{{ agent.name }}')">
                 <div class="agent-name">
-                    <span class="agent-dot dot-{{ agent.name }}"></span>
-                    {{ agent.name }}
+                    <span class="agent-dot dot-{{ agent.name | lower | replace(' ', '-') }}" id="dot-{{ agent.name | lower | replace(' ', '-') | replace('(', '') | replace(')', '') }}"></span>
+                    <span id="name-{{ agent.name | lower | replace(' ', '-') | replace('(', '') | replace(')', '') }}">{{ agent.name }}</span>
                 </div>
                 <div class="agent-did">{{ agent.did }}</div>
                 <div class="agent-caps">
@@ -464,8 +490,28 @@
                     <span class="cap-tag">{{ cap }}</span>
                     {% endfor %}
                 </div>
+                {% if agent.name | lower not in ['cfo sarah', 'dr. chen (physician)'] %}
+                <div style="margin-top:6px; display:flex; gap:4px" onclick="event.stopPropagation()">
+                    <button class="btn-danger" style="font-size:10px;padding:4px 10px;flex:1"
+                            id="revoke-btn-{{ agent.name | lower | replace(' ', '-') | replace('(', '') | replace(')', '') }}"
+                            onclick="revokeAgent('{{ agent.name | lower }}')">Revoke</button>
+                    <button class="btn-secondary" style="font-size:10px;padding:4px 10px;flex:1"
+                            id="cap-btn-{{ agent.name | lower | replace(' ', '-') | replace('(', '') | replace(')', '') }}"
+                            onclick="modifyCostCap('{{ agent.name | lower }}')">Edit Cap</button>
+                </div>
+                {% endif %}
             </div>
             {% endfor %}
+
+            {% if mode in ['finance', 'hospital'] %}
+            <div class="section-label" style="margin-top:16px">Delegation Controls</div>
+            <div style="padding:0 8px; display:flex; flex-direction:column; gap:6px">
+                <button class="btn-danger" style="width:100%;font-size:11px;padding:6px"
+                        onclick="revokeAllAgents()">Revoke All Agents</button>
+                <button class="btn-secondary" style="width:100%;font-size:11px;padding:6px"
+                        onclick="showDelegationTree()">View Delegation Tree</button>
+            </div>
+            {% endif %}
         </div>
 
         <!-- Center: Chat Timeline -->
@@ -478,14 +524,14 @@
                 <div class="empty-state" id="empty-state">
                     <div class="empty-icon">◆</div>
                     <div class="empty-title">No activity yet</div>
-                    <div class="empty-desc">{% if mode == 'hospital' %}Enter a patient case to start the hospital delegation demo{% elif mode == 'debate' %}Enter a debate topic below to start the agent debate{% else %}Enter a request below to start the multi-agent workflow{% endif %}</div>
+                    <div class="empty-desc">{% if mode == 'finance' %}Enter a financial request to start the trading session{% elif mode == 'hospital' %}Enter a patient case to start the hospital delegation demo{% elif mode == 'debate' %}Enter a debate topic below to start the agent debate{% else %}Enter a request below to start the multi-agent workflow{% endif %}</div>
                 </div>
             </div>
             <div class="chat-input">
                 <input type="text" id="request-input"
-                       placeholder="{% if mode == 'hospital' %}e.g. 55-year-old male with acute chest pain and shortness of breath{% elif mode == 'debate' %}e.g. AI will replace most jobs within 10 years{% else %}e.g. Build a weather dashboard with live temperature{% endif %}"
+                       placeholder="{% if mode == 'finance' %}e.g. Check my portfolio and buy 50 AAPL{% elif mode == 'hospital' %}e.g. 55-year-old male with acute chest pain and shortness of breath{% elif mode == 'debate' %}e.g. AI will replace most jobs within 10 years{% else %}e.g. Build a weather dashboard with live temperature{% endif %}"
                        onkeydown="if(event.key==='Enter')runTask()">
-                <button class="btn-primary" id="run-btn" onclick="runTask()">{% if mode == 'hospital' %}Start Case{% elif mode == 'debate' %}Debate{% else %}Run{% endif %}</button>
+                <button class="btn-primary" id="run-btn" onclick="runTask()">{% if mode == 'finance' %}Send{% elif mode == 'hospital' %}Start Case{% elif mode == 'debate' %}Debate{% else %}Run{% endif %}</button>
             </div>
         </div>
 
@@ -493,9 +539,9 @@
         <div class="right-panel">
             <div class="tab-bar">
                 <div class="tab active" data-tab="provenance" onclick="switchTab('provenance')">Trail</div>
-                <div class="tab" data-tab="messages" onclick="switchTab('messages')">Audit Logs</div>
-                <div class="tab" data-tab="memory" onclick="switchTab('memory')">Memory</div>
-                <div class="tab" data-tab="graph" onclick="switchTab('graph')">Graph</div>
+                <div class="tab" data-tab="messages" onclick="switchTab('messages')">Audit</div>
+                <div class="tab" data-tab="delegations" onclick="switchTab('delegations')">Delegations</div>
+                <div class="tab" data-tab="tamper" onclick="switchTab('tamper'); loadTamperDemo()">Tamper</div>
             </div>
             <div class="tab-content">
                 <div class="tab-pane active" id="tab-provenance">
@@ -515,7 +561,7 @@
                             </div>
                             <div class="stat-card">
                                 <div class="stat-label">Signatures</div>
-                                <div class="stat-value" id="stat-sigs" style="font-size:13px; color:var(--success)">—</div>
+                                <div class="stat-value" id="stat-sigs" style="font-size:13px; color:var(--success)">--</div>
                             </div>
                         </div>
                         <div class="section-label">Provenance Entries</div>
@@ -542,29 +588,36 @@
                         </div>
                     </div>
                 </div>
-                <div class="tab-pane" id="tab-memory">
+                <div class="tab-pane" id="tab-delegations">
                     <div class="tab-pane-fixed">
                         <div class="stats-grid">
-                            <div class="stat-card" style="grid-column: span 2">
-                                <div class="stat-label">Shared Memories</div>
-                                <div class="stat-value" id="stat-memories" style="font-size:22px">0</div>
+                            <div class="stat-card">
+                                <div class="stat-label">Active</div>
+                                <div class="stat-value" id="stat-active-delegations" style="color:var(--success)">0</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-label">Revoked</div>
+                                <div class="stat-value" id="stat-revoked-delegations" style="color:var(--danger)">0</div>
                             </div>
                         </div>
-                        <div class="section-label">Knowledge Entries</div>
+                        <div class="section-label">Authority Chain</div>
                     </div>
-                    <div class="tab-pane-scroll" id="memory-entries">
+                    <div class="tab-pane-scroll" id="delegation-entries">
                         <div class="empty-state">
-                            <div class="empty-desc">Agents will memorize decisions and findings here</div>
+                            <div class="empty-desc">Start a session to see the delegation tree</div>
                         </div>
                     </div>
                 </div>
-                <div class="tab-pane" id="tab-graph">
-                    <div class="tab-pane-fixed" style="padding-bottom:14px">
-                        <canvas id="graph-canvas"></canvas>
-                        <div style="margin-top:8px; font-size:10px; color:var(--text-tertiary)">
-                            <span style="color:var(--info)">●</span> Agent
-                            <span style="color:var(--gold); margin-left:8px">●</span> Task
-                            <span style="color:var(--success); margin-left:8px">●</span> Artifact
+                <div class="tab-pane" id="tab-tamper">
+                    <div class="tab-pane-fixed">
+                        <div class="section-label">Tamper Detection Demo</div>
+                        <p style="font-size:11px; color:var(--text-tertiary); padding:0 0 8px">
+                            What happens when a signed message is modified after signing.
+                        </p>
+                    </div>
+                    <div class="tab-pane-scroll" id="tamper-content-inline">
+                        <div class="empty-state">
+                            <div class="empty-desc">Click this tab to run the tamper demo</div>
                         </div>
                     </div>
                 </div>
@@ -621,6 +674,30 @@
         </div>
     </div>
 
+    <!-- Cost Cap Modal -->
+    <div class="modal-overlay" id="cap-modal">
+        <div class="modal" style="max-width:400px">
+            <button class="modal-close" onclick="closeCapModal()" aria-label="Close">&times;</button>
+            <h2 style="font-size:16px">Modify Cost Cap</h2>
+            <p style="font-size:12px; color:var(--text-secondary); margin:8px 0 16px">
+                Revokes the current delegation and re-delegates with the new cost limit.
+            </p>
+            <div id="cap-agent-name" style="font-size:13px; font-weight:600; color:var(--gold); margin-bottom:12px"></div>
+            <div style="display:flex; gap:8px; align-items:center">
+                <span style="font-size:18px; color:var(--text-secondary)">$</span>
+                <input type="number" id="cap-input" value="500" min="0" step="50"
+                       style="flex:1; background:var(--bg); border:1px solid var(--border); border-radius:6px;
+                              padding:10px 14px; color:var(--text-primary); font-size:16px; font-family:monospace;
+                              outline:none; -moz-appearance:textfield"
+                       onkeydown="if(event.key==='Enter')submitCapChange()">
+            </div>
+            <div style="display:flex; gap:8px; margin-top:16px; justify-content:flex-end">
+                <button class="btn-secondary" onclick="closeCapModal()">Cancel</button>
+                <button class="btn-primary" onclick="submitCapChange()">Update Cap</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Tamper Demo Modal -->
     <div class="modal-overlay" id="tamper-modal">
         <div class="modal" style="max-width:640px">
@@ -641,7 +718,7 @@
         const provEl = document.getElementById("prov-entries");
         const runBtn = document.getElementById("run-btn");
         const inputEl = document.getElementById("request-input");
-        const memEl = document.getElementById("memory-entries");
+        const memEl = document.getElementById("memory-entries") || document.createElement("div");
         const auditEl = document.getElementById("audit-entries");
         let messageCount = 0;
         let provCount = 0;
@@ -953,7 +1030,9 @@
             "judge-feasibility": "var(--warning)", "judge-ethics": "var(--relationship)",
             physician: "#FF6B6B", orchestrator: "var(--gold)",
             diagnostic: "var(--info)", treatment: "var(--success)",
-            discharge: "var(--relationship)"
+            discharge: "var(--relationship)",
+            cfo: "#FF6B6B", trading: "var(--success)",
+            payments: "var(--info)", audit: "var(--warning)"
         };
         // Build DID→name map from page data
         const didNameMap = {};
@@ -1087,6 +1166,169 @@
             document.getElementById("msg-count").textContent = messageCount + " messages";
         }
 
+        // === Delegation Controls ===
+        function revokeAgent(agentName) {
+            const btn = document.getElementById("revoke-btn-" + agentName.replace(/ /g, "-"));
+            if (btn) { btn.disabled = true; btn.textContent = "Revoking..."; }
+
+            fetch("/revoke", {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({agent: agentName}),
+            })
+            .then(r => r.json())
+            .then(data => {
+                // Mark the card as revoked
+                const card = document.getElementById("agent-card-" + agentName.replace(/ /g, "-"));
+                if (card) card.classList.add("revoked");
+                if (btn) { btn.textContent = "Revoked"; btn.style.opacity = "0.4"; }
+
+                // Show in chat
+                addDelegationCard("cfo", "delegation", data.message || agentName + " delegation revoked", {
+                    status: "REVOKED",
+                    agent: agentName,
+                    reason: "Manually revoked via delegation controls",
+                });
+
+                // Show the cap button as disabled too
+                const capBtn = document.getElementById("cap-btn-" + agentName.replace(/ /g, "-"));
+                if (capBtn) { capBtn.disabled = true; capBtn.style.opacity = "0.4"; }
+            })
+            .catch(err => {
+                if (btn) { btn.disabled = false; btn.textContent = "Revoke"; }
+                addMessage("system", "error", "Failed to revoke: " + err.message, {});
+            });
+        }
+
+        function revokeAllAgents() {
+            if (!confirm("Revoke ALL agent delegations?")) return;
+            document.querySelectorAll("[id^='revoke-btn-']").forEach(btn => {
+                const name = btn.id.replace("revoke-btn-", "").replace(/-/g, " ");
+                if (!btn.disabled) revokeAgent(name);
+            });
+        }
+
+        let _capTargetAgent = null;
+
+        function modifyCostCap(agentName) {
+            _capTargetAgent = agentName;
+            document.getElementById("cap-agent-name").textContent = agentName.charAt(0).toUpperCase() + agentName.slice(1);
+            document.getElementById("cap-input").value = "500";
+            document.getElementById("cap-modal").classList.add("open");
+            setTimeout(() => document.getElementById("cap-input").select(), 100);
+        }
+
+        function closeCapModal() {
+            document.getElementById("cap-modal").classList.remove("open");
+            _capTargetAgent = null;
+        }
+
+        function submitCapChange() {
+            if (!_capTargetAgent) return;
+            const newCap = parseFloat(document.getElementById("cap-input").value);
+            if (isNaN(newCap)) return;
+            const agentName = _capTargetAgent;
+            closeCapModal();
+
+            fetch("/modify_cap", {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({agent: agentName, new_cap: newCap}),
+            })
+            .then(r => r.json())
+            .then(data => {
+                addDelegationCard("cfo", "delegation", data.message || "Cost cap updated for " + agentName, {
+                    status: "CREATED",
+                    action: "modify_cap",
+                    caveats: ["max_cost=$" + newCap],
+                });
+            })
+            .catch(err => {
+                addMessage("system", "error", "Failed to modify cap: " + err.message, {});
+            });
+        }
+
+        let delegationCount = 0;
+        let revokedCount = 0;
+
+        function addDelegationEntry(info) {
+            const el = document.getElementById("delegation-entries");
+            const empty = el.querySelector(".empty-state");
+            if (empty) empty.remove();
+
+            const status = (info.status || "").toUpperCase();
+            let cardClass = "deleg-created";
+            let statusColor = "var(--gold)";
+            let icon = "&#9670;";
+            if (status === "VERIFIED") { cardClass = "deleg-verified"; statusColor = "var(--success)"; icon = "&#10003;"; }
+            else if (status === "DENIED") { cardClass = "deleg-denied"; statusColor = "var(--danger)"; icon = "&#10007;"; }
+            else if (status === "REVOKED") { cardClass = "deleg-revoked"; statusColor = "var(--warning)"; icon = "&#9888;"; revokedCount++; }
+
+            if (status === "CREATED" || status === "VERIFIED") delegationCount++;
+
+            const div = document.createElement("div");
+            div.className = "deleg-card " + cardClass;
+            div.style.animation = "fadeUp 0.25s ease both";
+            div.style.marginBottom = "6px";
+
+            let caveatsHtml = "";
+            if (info.caveats && info.caveats.length > 0) {
+                caveatsHtml = '<div style="margin-top:4px">' +
+                    info.caveats.map(c => '<span class="deleg-caveat">' + escapeHtml(c) + '</span>').join("") + '</div>';
+            }
+
+            let chainHtml = "";
+            if (info.chain && info.chain.length > 0) {
+                chainHtml = '<div class="deleg-chain">' + info.chain.map(d => d.substring(0, 16) + "...").join(" &rarr; ") + '</div>';
+            }
+
+            const issuer = info.issuer || info.agent || "";
+            const delegate = info.delegate || "";
+
+            div.innerHTML =
+                '<div class="deleg-status" style="color:' + statusColor + '">' + icon + ' ' + status + '</div>' +
+                (issuer ? '<div style="font-size:11px;color:var(--text-secondary)">' + escapeHtml(issuer) + (delegate ? ' &rarr; ' + escapeHtml(delegate) : '') + '</div>' : '') +
+                (info.reason ? '<div style="font-size:11px;color:var(--text-tertiary);margin-top:2px">' + escapeHtml(info.reason) + '</div>' : '') +
+                chainHtml + caveatsHtml;
+
+            el.appendChild(div);
+            el.scrollTop = el.scrollHeight;
+
+            document.getElementById("stat-active-delegations").textContent = delegationCount;
+            document.getElementById("stat-revoked-delegations").textContent = revokedCount;
+        }
+
+        function showDelegationTree() {
+            switchTab('delegations');
+        }
+
+        function loadTamperDemo() {
+            const el = document.getElementById("tamper-content-inline");
+            el.innerHTML = '<div class="empty-state"><div class="empty-desc">Running tamper test...</div></div>';
+
+            fetch("/tamper", {method: "POST"})
+            .then(r => r.json())
+            .then(data => {
+                el.innerHTML =
+                    '<div class="deleg-card deleg-verified" style="margin-bottom:8px">' +
+                        '<div class="deleg-status" style="color:var(--success)">&#10003; ORIGINAL MESSAGE</div>' +
+                        '<div style="font-size:11px;color:var(--text-secondary);margin-top:4px">Task: "' + escapeHtml(data.original.message.payload.task) + '"</div>' +
+                        '<div style="font-size:10px;font-family:monospace;color:var(--success);margin-top:4px">Signature valid: ' + data.original.signature_valid + '</div>' +
+                    '</div>' +
+                    '<div class="deleg-card deleg-denied" style="margin-bottom:8px">' +
+                        '<div class="deleg-status" style="color:var(--danger)">&#10007; TAMPERED MESSAGE</div>' +
+                        '<div style="font-size:11px;color:var(--text-secondary);margin-top:4px">Task: "' + escapeHtml(data.tampered.message.payload.task) + '"</div>' +
+                        '<div style="font-size:10px;font-family:monospace;color:var(--danger);margin-top:4px">Signature valid: ' + data.tampered.signature_valid + '</div>' +
+                    '</div>' +
+                    '<div style="font-size:11px;color:var(--text-tertiary);padding:8px 0;line-height:1.5">' +
+                        escapeHtml(data.explanation) +
+                    '</div>';
+            })
+            .catch(err => {
+                el.innerHTML = '<div class="empty-state"><div class="empty-desc">Error: ' + err.message + '</div></div>';
+            });
+        }
+
         function escapeHtml(text) {
             const d = document.createElement("div");
             d.textContent = text;
@@ -1094,6 +1336,8 @@
         }
 
         // === Run task (SSE streaming) ===
+        let sessionActive = false;
+
         function runTask() {
             const req = inputEl.value.trim();
             if (!req) return;
@@ -1101,18 +1345,26 @@
             runBtn.disabled = true;
             inputEl.disabled = true;
             runBtn.textContent = "Running...";
-            messagesEl.innerHTML = "";
-            provEl.innerHTML = '<div class="empty-state"><div class="empty-desc">Streaming...</div></div>';
-            memEl.innerHTML = '<div class="empty-state"><div class="empty-desc">Waiting for agents...</div></div>';
-            auditEl.innerHTML = '<div class="empty-state"><div class="empty-desc">Waiting for signed messages...</div></div>';
-            messageCount = 0;
-            provCount = 0;
-            memCount = 0;
-            auditCount = 0;
-            document.getElementById("stat-memories").textContent = "0";
-            document.getElementById("stat-msgs").textContent = "0";
 
-            addMessage("system", "status", 'Request: "' + req + '"', {});
+            // Only reset on first message in non-finance modes
+            if (currentMode !== "finance" || !sessionActive) {
+                messagesEl.innerHTML = "";
+                provEl.innerHTML = '<div class="empty-state"><div class="empty-desc">Streaming...</div></div>';
+                auditEl.innerHTML = '<div class="empty-state"><div class="empty-desc">Waiting for signed messages...</div></div>';
+                document.getElementById("delegation-entries").innerHTML = '<div class="empty-state"><div class="empty-desc">Streaming...</div></div>';
+                messageCount = 0;
+                provCount = 0;
+                memCount = 0;
+                auditCount = 0;
+                delegationCount = 0;
+                revokedCount = 0;
+                document.getElementById("stat-msgs").textContent = "0";
+                document.getElementById("stat-active-delegations").textContent = "0";
+                document.getElementById("stat-revoked-delegations").textContent = "0";
+            }
+
+            sessionActive = true;
+            addMessage("system", "status", req, {});
 
             const mode = currentMode;
             const source = new EventSource("/run_stream?request=" + encodeURIComponent(req) + "&mode=" + mode);
@@ -1124,7 +1376,8 @@
                     source.close();
                     runBtn.disabled = false;
                     inputEl.disabled = false;
-                    runBtn.textContent = currentMode === "hospital" ? "Start Case" : currentMode === "debate" ? "Debate" : "Run";
+                    runBtn.textContent = currentMode === "finance" ? "Send" : currentMode === "hospital" ? "Start Case" : currentMode === "debate" ? "Debate" : "Run";
+                    inputEl.value = "";
                     inputEl.focus();
                     return;
                 }
@@ -1159,9 +1412,11 @@
                     return;
                 }
 
-                // Handle delegation events (hospital mode)
+                // Handle delegation events
                 if (ev.type === "delegation" || ev.type === "delegation_check") {
                     addDelegationCard(ev.agent, ev.type, ev.message, ev.delegation_info || ev.details);
+                    // Also add to the delegations tab
+                    if (ev.delegation_info) addDelegationEntry(ev.delegation_info);
                     return;
                 }
 

@@ -303,6 +303,17 @@ class HospitalCoordinator:
 
         self.all_agents = [self.orchestrator, self.diagnostic, self.treatment, self.discharge]
 
+    def reset_session(self):
+        """Reset workflow state while keeping the same agent identities/DIDs."""
+        self.authority = HospitalAuthorityManager(self.physician_kp)
+        self.provenance = ProvenanceGraph()
+        self.memory = SharedMemory()
+        for a in self.all_agents:
+            a.delegation = None
+            a.authority_manager = None
+            a.message_log = []
+            a.total_tokens_used = 0
+
     def _event(self, event_type, message, agent_name="system",
                details=None, prov_entry=None, memory_entry=None,
                signed_msg=None, delegation_info=None):
