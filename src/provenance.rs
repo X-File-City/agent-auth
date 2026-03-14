@@ -91,8 +91,55 @@ impl ProvenanceEntry {
         })
     }
 
-    /// Verify this provenance entry's signature against a known identity.
+    /// Verify this provenance entry: signature AND outer field integrity.
+    ///
+    /// Checks that:
+    /// 1. The signature is valid for the given identity
+    /// 2. The outer fields (agent_did, action, entity_ids, parent_ids, metadata)
+    ///    match what was actually signed in the envelope payload
+    ///
+    /// This prevents tampering with outer fields after signing.
     pub fn verify(&self, identity: &crate::AgentIdentity) -> Result<(), CryptoError> {
+        // 1. Verify the cryptographic signature
+        self.signed_envelope.verify(identity)?;
+
+        // 2. Verify outer fields match the signed payload
+        let payload = &self.signed_envelope.payload;
+
+        if payload.get("agent_did").and_then(|v| v.as_str()) != Some(&self.agent_did) {
+            return Err(CryptoError::IntegrityMismatch("agent_did".into()));
+        }
+
+        // Compare action: serialize both to JSON for consistent comparison
+        let signed_action = payload.get("action");
+        let outer_action = serde_json::to_value(&self.action).ok();
+        if signed_action != outer_action.as_ref() {
+            return Err(CryptoError::IntegrityMismatch("action".into()));
+        }
+
+        let signed_entities = payload.get("entity_ids");
+        let outer_entities = serde_json::to_value(&self.entity_ids).ok();
+        if signed_entities != outer_entities.as_ref() {
+            return Err(CryptoError::IntegrityMismatch("entity_ids".into()));
+        }
+
+        let signed_parents = payload.get("parent_ids");
+        let outer_parents = serde_json::to_value(&self.parent_ids).ok();
+        if signed_parents != outer_parents.as_ref() {
+            return Err(CryptoError::IntegrityMismatch("parent_ids".into()));
+        }
+
+        if payload.get("metadata") != Some(&self.metadata) {
+            return Err(CryptoError::IntegrityMismatch("metadata".into()));
+        }
+
+        Ok(())
+    }
+
+    /// Verify only the cryptographic signature, without checking field integrity.
+    ///
+    /// Use `verify()` instead unless you have a specific reason to skip integrity checks.
+    pub fn verify_signature_only(&self, identity: &crate::AgentIdentity) -> Result<(), CryptoError> {
         self.signed_envelope.verify(identity)
     }
 
@@ -156,7 +203,7 @@ mod tests {
     }
 
     #[test]
-    fn test_tampered_provenance_fails() {
+    fn test_tampered_entity_ids_fails_verify() {
         let kp = test_keypair();
         let mut entry = ProvenanceEntry::create(
             &kp,
@@ -167,21 +214,76 @@ mod tests {
         )
         .unwrap();
 
-        // Tamper with the entity IDs outside the signed envelope
         entry.entity_ids = vec!["entity-999".into()];
 
-        // The signed envelope payload still contains the original data
-        let payload = &entry.signed_envelope.payload;
-        let signed_entities = payload["entity_ids"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .filter_map(|v| v.as_str())
-            .collect::<Vec<_>>();
-        assert_ne!(
-            signed_entities,
-            entry.entity_ids.iter().map(|s| s.as_str()).collect::<Vec<_>>()
-        );
+        // verify() catches the tampered outer field
+        assert!(matches!(
+            entry.verify(&kp.identity()),
+            Err(CryptoError::IntegrityMismatch(ref field)) if field == "entity_ids"
+        ));
+
+        // verify_signature_only() still passes (signature is valid)
+        assert!(entry.verify_signature_only(&kp.identity()).is_ok());
+    }
+
+    #[test]
+    fn test_tampered_agent_did_fails_verify() {
+        let kp = test_keypair();
+        let mut entry = ProvenanceEntry::create(
+            &kp,
+            ActionType::Resolve,
+            vec!["entity-1".into()],
+            vec![],
+            serde_json::json!({}),
+        )
+        .unwrap();
+
+        entry.agent_did = "did:kanoniv:tampered".into();
+
+        assert!(matches!(
+            entry.verify(&kp.identity()),
+            Err(CryptoError::IntegrityMismatch(ref field)) if field == "agent_did"
+        ));
+    }
+
+    #[test]
+    fn test_tampered_action_fails_verify() {
+        let kp = test_keypair();
+        let mut entry = ProvenanceEntry::create(
+            &kp,
+            ActionType::Resolve,
+            vec!["entity-1".into()],
+            vec![],
+            serde_json::json!({}),
+        )
+        .unwrap();
+
+        entry.action = ActionType::Merge;
+
+        assert!(matches!(
+            entry.verify(&kp.identity()),
+            Err(CryptoError::IntegrityMismatch(ref field)) if field == "action"
+        ));
+    }
+
+    #[test]
+    fn test_tampered_metadata_fails_verify() {
+        let kp = test_keypair();
+        let mut entry = ProvenanceEntry::create(
+            &kp,
+            ActionType::Resolve,
+            vec!["entity-1".into()],
+            vec![],
+            serde_json::json!({"original": true}),
+        )
+        .unwrap();
+
+        entry.metadata = serde_json::json!({"tampered": true});
+
+        assert!(matches!(
+            entry.verify(&kp.identity()),
+            Err(CryptoError::IntegrityMismatch(ref field)) if field == "metadata"
+        ));
     }
 
     #[test]

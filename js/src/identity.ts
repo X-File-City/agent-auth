@@ -1,6 +1,7 @@
 import * as ed from "@noble/ed25519";
 import { sha256 } from "@noble/hashes/sha256";
 import { sha512 } from "@noble/hashes/sha512";
+import { base58 } from "@scure/base";
 import { CryptoError } from "./error.js";
 
 // ed25519 requires sha512 for internal operations
@@ -25,6 +26,42 @@ export function hexToBytes(hex: string): Uint8Array {
     bytes[i] = parseInt(hex.substring(i * 2, i * 2 + 2), 16);
   }
   return bytes;
+}
+
+/** Ed25519 multicodec prefix bytes. */
+const ED25519_MULTICODEC = new Uint8Array([0xed, 0x01]);
+
+/** Encode an Ed25519 public key as multibase (z + base58btc(0xed01 + key)). */
+export function encodeMultibaseEd25519(publicKeyBytes: Uint8Array): string {
+  const prefixed = new Uint8Array(2 + publicKeyBytes.length);
+  prefixed.set(ED25519_MULTICODEC);
+  prefixed.set(publicKeyBytes, 2);
+  return `z${base58.encode(prefixed)}`;
+}
+
+/** Decode a multibase-encoded Ed25519 public key back to an AgentIdentity. */
+export function identityFromMultibase(multibase: string): AgentIdentity {
+  if (!multibase.startsWith("z")) {
+    throw CryptoError.invalidSignatureEncoding(
+      "multibase must start with 'z' (base58btc)",
+    );
+  }
+  let decoded: Uint8Array;
+  try {
+    decoded = base58.decode(multibase.slice(1));
+  } catch {
+    throw CryptoError.invalidSignatureEncoding("invalid base58btc");
+  }
+  if (
+    decoded.length !== 34 ||
+    decoded[0] !== 0xed ||
+    decoded[1] !== 0x01
+  ) {
+    throw CryptoError.invalidSignatureEncoding(
+      "expected ed25519-pub multicodec prefix (0xed01) + 32 bytes",
+    );
+  }
+  return identityFromBytes(decoded.slice(2));
 }
 
 /** Public identity derived from a keypair - safe to share and store. */
@@ -85,14 +122,6 @@ export function keyPairFromBytes(secret: Uint8Array): AgentKeyPair {
   return { secretKey: new Uint8Array(secret), identity };
 }
 
-/** Base64 encode bytes without requiring Node.js Buffer. */
-function base64Encode(bytes: Uint8Array): string {
-  // Use btoa which is available in Node 16+, browsers, Deno, Bun
-  let binary = "";
-  for (const byte of bytes) binary += String.fromCharCode(byte);
-  return btoa(binary);
-}
-
 /** A service endpoint for a DID Document (W3C DID Core). */
 export interface ServiceEndpoint {
   /** Fragment ID (e.g. "#messaging") or full URI. Fragments are auto-prefixed with the DID. */
@@ -113,16 +142,19 @@ export function didDocumentWithServices(
   identity: AgentIdentity,
   services: ServiceEndpoint[],
 ): Record<string, unknown> {
-  const pkBase64 = base64Encode(identity.publicKeyBytes);
+  const pkMultibase = encodeMultibaseEd25519(identity.publicKeyBytes);
   const doc: Record<string, unknown> = {
-    "@context": ["https://www.w3.org/ns/did/v1"],
+    "@context": [
+      "https://www.w3.org/ns/did/v1",
+      "https://w3id.org/security/suites/ed25519-2020/v1",
+    ],
     id: identity.did,
     verificationMethod: [
       {
         id: `${identity.did}#key-1`,
         type: "Ed25519VerificationKey2020",
         controller: identity.did,
-        publicKeyBase64: pkBase64,
+        publicKeyMultibase: pkMultibase,
       },
     ],
     authentication: [`${identity.did}#key-1`],

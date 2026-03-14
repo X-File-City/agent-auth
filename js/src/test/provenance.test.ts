@@ -4,6 +4,7 @@ import {
   generateKeyPair,
   createProvenanceEntry,
   verifyProvenanceEntry,
+  verifyProvenanceSignatureOnly,
   provenanceContentHash,
 } from "../index.js";
 
@@ -87,5 +88,39 @@ describe("ProvenanceEntry", () => {
 
     assert.equal(e3.parent_ids.length, 2);
     assert.doesNotThrow(() => verifyProvenanceEntry(e3, kp.identity));
+  });
+
+  it("tampered entity_ids fails verify", () => {
+    const kp = generateKeyPair();
+    const entry = createProvenanceEntry(kp, "resolve", ["e1"], [], {});
+    entry.entity_ids = ["tampered"];
+    assert.throws(() => verifyProvenanceEntry(entry, kp.identity));
+    // signature-only still passes
+    assert.doesNotThrow(() =>
+      verifyProvenanceSignatureOnly(entry, kp.identity),
+    );
+  });
+
+  it("tampered agent_did fails verify", () => {
+    const kp = generateKeyPair();
+    const entry = createProvenanceEntry(kp, "resolve", ["e1"], [], {});
+    entry.agent_did = "did:kanoniv:tampered";
+    assert.throws(() => verifyProvenanceEntry(entry, kp.identity));
+  });
+
+  it("tampered action fails verify", () => {
+    const kp = generateKeyPair();
+    const entry = createProvenanceEntry(kp, "resolve", ["e1"], [], {});
+    entry.action = "merge";
+    assert.throws(() => verifyProvenanceEntry(entry, kp.identity));
+  });
+
+  it("tampered metadata fails verify", () => {
+    const kp = generateKeyPair();
+    const entry = createProvenanceEntry(kp, "resolve", ["e1"], [], {
+      original: true,
+    });
+    entry.metadata = { tampered: true };
+    assert.throws(() => verifyProvenanceEntry(entry, kp.identity));
   });
 });

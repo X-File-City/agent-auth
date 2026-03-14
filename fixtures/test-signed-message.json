@@ -1,7 +1,7 @@
 {
   "description": "Signed message for cross-language verification. Verify using the public key from test-keypair.json.",
   "expected": {
-    "content_hash": "540c43485102ef7f2cbc22c568d4c030d012c93b8899df3fa44d43df57711879",
+    "content_hash": "430139952abe3f708e83253a9e7e4beff5caec5f3cda3298722953d575bfc3ae",
     "content_hash_length_hex": 64,
     "payload": {
       "action": "resolve",
@@ -12,14 +12,14 @@
     "signer_did": "did:kanoniv:21fe31dfa154a261626bf854046fd227"
   },
   "signed_message": {
-    "nonce": "7ec39d12-cd77-4e09-adaa-4d7412e792c8",
+    "nonce": "d5925077-83ec-406d-9956-5466a0507f31",
     "payload": {
       "action": "resolve",
       "entity_id": "entity-abc-123",
       "source": "crm"
     },
-    "signature": "fa8274b9be0b68b263c663d1b89992aadac91a4ff51db7eb7cb9d2149761a82b27975ac9d4671aec1b68abb1a39aa570023fa4108fe7ac7bd68c48ddade33707",
+    "signature": "ca1cd9408da5a64ad3f5ce648303b6bba8a23f5e95d6b31250f85847e390cdcddd0ee6eeebc3120141dcfa0bf098012a2854d5c2156b340af0de1aae0547df0a",
     "signer_did": "did:kanoniv:21fe31dfa154a261626bf854046fd227",
-    "timestamp": "2026-03-14T16:47:40.664Z"
+    "timestamp": "2026-03-14T17:08:09.411Z"
   }
 }

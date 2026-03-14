@@ -5,6 +5,8 @@ import {
   keyPairFromBytes,
   computeDid,
   identityFromBytes,
+  identityFromMultibase,
+  encodeMultibaseEd25519,
   didDocument,
   didDocumentWithServices,
   hexToBytes,
@@ -69,7 +71,23 @@ describe("DID Document", () => {
     const vm = (doc["verificationMethod"] as Record<string, unknown>[])[0];
     assert.equal(vm["type"], "Ed25519VerificationKey2020");
     assert.equal(vm["controller"], kp.identity.did);
-    assert.ok(typeof vm["publicKeyBase64"] === "string");
+    const pkMb = vm["publicKeyMultibase"] as string;
+    assert.ok(pkMb.startsWith("z"), "multibase must start with 'z'");
+  });
+
+  it("multibase roundtrips to identity", () => {
+    const kp = generateKeyPair();
+    const doc = didDocument(kp.identity);
+    const vm = (doc["verificationMethod"] as Record<string, unknown>[])[0];
+    const pkMb = vm["publicKeyMultibase"] as string;
+    const restored = identityFromMultibase(pkMb);
+    assert.equal(restored.did, kp.identity.did);
+  });
+
+  it("multibase has correct encoding", () => {
+    const kp = generateKeyPair();
+    const mb = encodeMultibaseEd25519(kp.identity.publicKeyBytes);
+    assert.ok(mb.startsWith("z"));
   });
 
   it("has no service field without services", () => {

@@ -116,18 +116,18 @@ impl AgentIdentity {
     /// Service endpoints allow agent frameworks to discover how to
     /// communicate with this agent (messaging, API, coordination).
     pub fn did_document_with_services(&self, services: &[ServiceEndpoint]) -> serde_json::Value {
-        let pk_base64 = base64::Engine::encode(
-            &base64::engine::general_purpose::STANDARD,
-            &self.public_key_bytes,
-        );
+        let pk_multibase = Self::encode_multibase_ed25519(&self.public_key_bytes);
         let mut doc = serde_json::json!({
-            "@context": ["https://www.w3.org/ns/did/v1"],
+            "@context": [
+                "https://www.w3.org/ns/did/v1",
+                "https://w3id.org/security/suites/ed25519-2020/v1"
+            ],
             "id": self.did,
             "verificationMethod": [{
                 "id": format!("{}#key-1", self.did),
                 "type": "Ed25519VerificationKey2020",
                 "controller": self.did,
-                "publicKeyBase64": pk_base64
+                "publicKeyMultibase": pk_multibase
             }],
             "authentication": [format!("{}#key-1", self.did)],
             "assertionMethod": [format!("{}#key-1", self.did)]
@@ -161,6 +161,38 @@ impl AgentIdentity {
         let hash = Sha256::digest(public_key_bytes);
         let short_hash = hex::encode(&hash[..16]);
         format!("did:kanoniv:{}", short_hash)
+    }
+
+    /// Encode a public key as multibase (z + base58btc(multicodec_prefix + key)).
+    ///
+    /// Ed25519 multicodec prefix: 0xed 0x01
+    /// Multibase prefix for base58btc: 'z'
+    fn encode_multibase_ed25519(public_key_bytes: &[u8]) -> String {
+        let mut prefixed = Vec::with_capacity(2 + public_key_bytes.len());
+        prefixed.extend_from_slice(&[0xed, 0x01]); // ed25519-pub multicodec
+        prefixed.extend_from_slice(public_key_bytes);
+        format!("z{}", bs58::encode(&prefixed).into_string())
+    }
+
+    /// Decode a multibase-encoded Ed25519 public key.
+    ///
+    /// Expects format: z{base58btc(0xed01 + 32_bytes)}
+    pub fn from_multibase(multibase: &str) -> Result<Self, CryptoError> {
+        let stripped = multibase.strip_prefix('z')
+            .ok_or_else(|| CryptoError::InvalidSignatureEncoding(
+                "multibase must start with 'z' (base58btc)".into()
+            ))?;
+        let decoded = bs58::decode(stripped)
+            .into_vec()
+            .map_err(|e| CryptoError::InvalidSignatureEncoding(
+                format!("invalid base58btc: {}", e)
+            ))?;
+        if decoded.len() != 34 || decoded[0] != 0xed || decoded[1] != 0x01 {
+            return Err(CryptoError::InvalidSignatureEncoding(
+                "expected ed25519-pub multicodec prefix (0xed01) + 32 bytes".into()
+            ));
+        }
+        Self::from_bytes(&decoded[2..])
     }
 }
 
@@ -244,7 +276,8 @@ mod tests {
         let vm = &doc["verificationMethod"][0];
         assert_eq!(vm["type"].as_str().unwrap(), "Ed25519VerificationKey2020");
         assert_eq!(vm["controller"].as_str().unwrap(), identity.did);
-        assert!(vm["publicKeyBase64"].as_str().is_some());
+        let pk_mb = vm["publicKeyMultibase"].as_str().unwrap();
+        assert!(pk_mb.starts_with('z'), "multibase must start with 'z'");
     }
 
     #[test]
@@ -286,20 +319,58 @@ mod tests {
     }
 
     #[test]
-    fn test_did_document_base64_roundtrip() {
+    fn test_did_document_multibase_roundtrip() {
         let kp = AgentKeyPair::generate();
         let identity = kp.identity();
         let doc = identity.did_document();
 
-        let pk_b64 = doc["verificationMethod"][0]["publicKeyBase64"]
+        let pk_mb = doc["verificationMethod"][0]["publicKeyMultibase"]
             .as_str()
             .unwrap();
-        let decoded = base64::Engine::decode(
-            &base64::engine::general_purpose::STANDARD,
-            pk_b64,
-        )
-        .unwrap();
-        assert_eq!(decoded, identity.public_key_bytes);
+        // Decode multibase back to an identity and verify it matches
+        let restored = AgentIdentity::from_multibase(pk_mb).unwrap();
+        assert_eq!(restored.did, identity.did);
+        assert_eq!(restored.public_key_bytes, identity.public_key_bytes);
+    }
+
+    #[test]
+    fn test_multibase_encoding_format() {
+        let kp = AgentKeyPair::generate();
+        let identity = kp.identity();
+        let doc = identity.did_document();
+        let pk_mb = doc["verificationMethod"][0]["publicKeyMultibase"]
+            .as_str()
+            .unwrap();
+
+        // Must start with 'z' (base58btc multibase prefix)
+        assert!(pk_mb.starts_with('z'));
+        // Decode base58btc (strip 'z' prefix)
+        let decoded = bs58::decode(&pk_mb[1..]).into_vec().unwrap();
+        // First two bytes are ed25519-pub multicodec (0xed 0x01)
+        assert_eq!(decoded[0], 0xed);
+        assert_eq!(decoded[1], 0x01);
+        // Remaining 32 bytes are the public key
+        assert_eq!(&decoded[2..], &identity.public_key_bytes);
+    }
+
+    #[test]
+    fn test_from_multibase_invalid_prefix() {
+        let result = AgentIdentity::from_multibase("m_not_base58btc");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_from_multibase_invalid_base58() {
+        let result = AgentIdentity::from_multibase("z!!!invalid!!!");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_from_multibase_wrong_codec() {
+        // Valid base58btc but wrong multicodec prefix (not ed25519)
+        let wrong_prefix = bs58::encode(&[0x00u8; 34]).into_string();
+        let result = AgentIdentity::from_multibase(&format!("z{}", wrong_prefix));
+        assert!(result.is_err());
     }
 
     #[test]

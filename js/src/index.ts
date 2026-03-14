@@ -7,6 +7,8 @@ export {
   keyPairFromBytes,
   computeDid,
   identityFromBytes,
+  identityFromMultibase,
+  encodeMultibaseEd25519,
   didDocument,
   didDocumentWithServices,
   bytesToHex,
@@ -23,6 +25,7 @@ export {
   type ProvenanceEntry,
   createProvenanceEntry,
   verifyProvenanceEntry,
+  verifyProvenanceSignatureOnly,
   provenanceContentHash,
   ACTION_TYPES,
 } from "./provenance.js";

@@ -5,6 +5,7 @@ import {
   verifyMessage,
   contentHash,
 } from "./signing.js";
+import { CryptoError } from "./error.js";
 
 /** Standard action types. */
 export const ACTION_TYPES = [
@@ -64,8 +65,64 @@ export function createProvenanceEntry(
   };
 }
 
-/** Verify a provenance entry's signature against a known identity. */
+/**
+ * Verify a provenance entry: signature AND outer field integrity.
+ *
+ * Checks that the signature is valid and that outer fields match
+ * what was actually signed in the envelope payload.
+ */
 export function verifyProvenanceEntry(
+  entry: ProvenanceEntry,
+  identity: AgentIdentity,
+): void {
+  // 1. Verify the cryptographic signature
+  verifyMessage(entry.signed_envelope, identity);
+
+  // 2. Verify outer fields match the signed payload
+  const payload = entry.signed_envelope.payload as Record<string, unknown>;
+
+  if (payload.agent_did !== entry.agent_did) {
+    throw new CryptoError(
+      "SIGNATURE_INVALID",
+      "Integrity check failed: outer field 'agent_did' does not match signed payload",
+    );
+  }
+
+  if (JSON.stringify(payload.action) !== JSON.stringify(entry.action)) {
+    throw new CryptoError(
+      "SIGNATURE_INVALID",
+      "Integrity check failed: outer field 'action' does not match signed payload",
+    );
+  }
+
+  if (JSON.stringify(payload.entity_ids) !== JSON.stringify(entry.entity_ids)) {
+    throw new CryptoError(
+      "SIGNATURE_INVALID",
+      "Integrity check failed: outer field 'entity_ids' does not match signed payload",
+    );
+  }
+
+  if (JSON.stringify(payload.parent_ids) !== JSON.stringify(entry.parent_ids)) {
+    throw new CryptoError(
+      "SIGNATURE_INVALID",
+      "Integrity check failed: outer field 'parent_ids' does not match signed payload",
+    );
+  }
+
+  if (JSON.stringify(payload.metadata) !== JSON.stringify(entry.metadata)) {
+    throw new CryptoError(
+      "SIGNATURE_INVALID",
+      "Integrity check failed: outer field 'metadata' does not match signed payload",
+    );
+  }
+}
+
+/**
+ * Verify only the cryptographic signature, without checking field integrity.
+ *
+ * Use verifyProvenanceEntry() instead unless you have a specific reason to skip integrity checks.
+ */
+export function verifyProvenanceSignatureOnly(
   entry: ProvenanceEntry,
   identity: AgentIdentity,
 ): void {

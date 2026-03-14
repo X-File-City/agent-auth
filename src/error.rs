@@ -17,4 +17,7 @@ pub enum CryptoError {
 
     #[error("Serialization error: {0}")]
     SerializationError(String),
+
+    #[error("Integrity check failed: outer field '{0}' does not match signed payload")]
+    IntegrityMismatch(String),
 }
