@@ -42,6 +42,6 @@ jobs:
         with:
           python-version: "3.12"
       - uses: dtolnay/rust-toolchain@stable
-      - run: pip install maturin pytest
-      - run: cd python && maturin develop
-      - run: cd python && pytest tests/ -v
+      - run: python -m venv .venv && source .venv/bin/activate && pip install maturin pytest
+      - run: source .venv/bin/activate && cd python && maturin develop
+      - run: source .venv/bin/activate && cd python && pytest tests/ -v
