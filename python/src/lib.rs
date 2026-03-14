@@ -363,7 +363,7 @@ impl Delegation {
     fn depth(&self) -> usize { self.inner.depth() }
 
     fn __repr__(&self) -> String {
-        format!("Delegation(issuer='{}', subject='{}')", self.inner.issuer_did, self.inner.delegate_did)
+        format!("Delegation(issuer='{}', delegate='{}')", self.inner.issuer_did, self.inner.delegate_did)
     }
 }
 

@@ -51,13 +51,13 @@ export interface VerificationResult {
 /** Create a root delegation (issuer is the root authority). */
 export function createRootDelegation(
   issuerKeypair: AgentKeyPair,
-  subjectDid: string,
+  delegateDid: string,
   caveats: Caveat[],
 ): Delegation {
   const issuerDid = issuerKeypair.identity.did;
   const payload = {
     issuer_did: issuerDid,
-    delegate_did: subjectDid,
+    delegate_did: delegateDid,
     caveats,
     parent_hash: null,
   };
@@ -65,7 +65,7 @@ export function createRootDelegation(
 
   return {
     issuer_did: issuerDid,
-    delegate_did: subjectDid,
+    delegate_did: delegateDid,
     issuer_public_key: bytesToHex(issuerKeypair.identity.publicKeyBytes),
     caveats,
     parent_proof: null,
@@ -76,7 +76,7 @@ export function createRootDelegation(
 /** Create a delegated delegation (with parent chain). Caveats accumulate. */
 export function delegateAuthority(
   issuerKeypair: AgentKeyPair,
-  subjectDid: string,
+  delegateDid: string,
   additionalCaveats: Caveat[],
   parent: Delegation,
 ): Delegation {
@@ -85,7 +85,7 @@ export function delegateAuthority(
   if (parent.delegate_did !== issuerDid) {
     throw new CryptoError(
       "SIGNATURE_INVALID",
-      "Delegation chain broken: issuer is not the subject of parent delegation",
+      "Delegation chain broken: issuer is not the delegate of parent delegation",
     );
   }
 
@@ -93,7 +93,7 @@ export function delegateAuthority(
   const parentHash = contentHash(parent.proof);
   const payload = {
     issuer_did: issuerDid,
-    delegate_did: subjectDid,
+    delegate_did: delegateDid,
     caveats: allCaveats,
     parent_hash: parentHash,
   };
@@ -101,7 +101,7 @@ export function delegateAuthority(
 
   return {
     issuer_did: issuerDid,
-    delegate_did: subjectDid,
+    delegate_did: delegateDid,
     issuer_public_key: bytesToHex(issuerKeypair.identity.publicKeyBytes),
     caveats: allCaveats,
     parent_proof: parent,
@@ -121,7 +121,7 @@ export function createInvocation(
   if (delegation.delegate_did !== invokerDid) {
     throw new CryptoError(
       "SIGNATURE_INVALID",
-      "Delegation chain broken: invoker is not the subject of the delegation",
+      "Delegation chain broken: invoker is not the delegate of the delegation",
     );
   }
 
@@ -170,11 +170,11 @@ export function verifyInvocationWithRevocation(
   // 1. Verify invocation signature
   verifyMessage(invocation.proof, invokerIdentity);
 
-  // 2. Verify invoker matches delegation subject
+  // 2. Verify invoker matches delegation delegate
   if (invocation.invoker_did !== invocation.delegation.delegate_did) {
     throw new CryptoError(
       "SIGNATURE_INVALID",
-      "Delegation chain broken: invoker is not the subject of the delegation",
+      "Delegation chain broken: invoker is not the delegate of the delegation",
     );
   }
 

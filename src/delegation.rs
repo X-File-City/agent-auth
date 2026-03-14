@@ -98,10 +98,10 @@ impl Delegation {
     ) -> Result<Self, CryptoError> {
         let issuer_identity = issuer_keypair.identity();
 
-        // Issuer must be the subject of the parent delegation
+        // Issuer must be the delegate of the parent delegation
         if parent.delegate_did != issuer_identity.did {
             return Err(CryptoError::DelegationChainBroken(
-                "issuer is not the subject of parent delegation".into(),
+                "issuer is not the delegate of parent delegation".into(),
             ));
         }
 
@@ -189,7 +189,7 @@ pub struct Invocation {
 impl Invocation {
     /// Create and sign an invocation.
     ///
-    /// The invoker must be the subject of the delegation.
+    /// The invoker must be the delegate of the delegation.
     pub fn create(
         invoker_keypair: &AgentKeyPair,
         action: &str,
@@ -200,7 +200,7 @@ impl Invocation {
 
         if delegation.delegate_did != invoker_identity.did {
             return Err(CryptoError::DelegationChainBroken(
-                "invoker is not the subject of the delegation".into(),
+                "invoker is not the delegate of the delegation".into(),
             ));
         }
 
@@ -271,10 +271,10 @@ pub fn verify_invocation_with_revocation(
     // 1. Verify invocation signature
     invocation.proof.verify(invoker_identity)?;
 
-    // 2. Verify invoker matches delegation subject
+    // 2. Verify invoker matches delegation delegate
     if invocation.invoker_did != invocation.delegation.delegate_did {
         return Err(CryptoError::DelegationChainBroken(
-            "invoker is not the subject of the delegation".into(),
+            "invoker is not the delegate of the delegation".into(),
         ));
     }
 
@@ -604,7 +604,7 @@ mod tests {
     }
 
     #[test]
-    fn test_delegate_must_be_parent_subject() {
+    fn test_delegate_must_be_parent_delegate() {
         let root = keypair();
         let agent_b = keypair();
         let agent_c = keypair();
@@ -654,7 +654,7 @@ mod tests {
     }
 
     #[test]
-    fn test_invocation_must_be_delegation_subject() {
+    fn test_invocation_must_be_delegation_delegate() {
         let root = keypair();
         let agent_b = keypair();
         let agent_c = keypair();
