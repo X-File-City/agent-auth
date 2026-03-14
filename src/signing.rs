@@ -73,8 +73,17 @@ impl SignedMessage {
     }
 
     /// Compute the SHA-256 content hash of this signed message.
+    ///
+    /// Uses canonical field ordering (alphabetical) to ensure cross-language
+    /// determinism: {nonce, payload, signature, signer_did, timestamp}.
     pub fn content_hash(&self) -> String {
-        let serialized = serde_json::to_string(self).unwrap_or_default();
+        let mut map = std::collections::BTreeMap::new();
+        map.insert("nonce", serde_json::json!(&self.nonce));
+        map.insert("payload", self.payload.clone());
+        map.insert("signature", serde_json::json!(&self.signature));
+        map.insert("signer_did", serde_json::json!(&self.signer_did));
+        map.insert("timestamp", serde_json::json!(&self.timestamp));
+        let serialized = serde_json::to_string(&map).unwrap_or_default();
         let hash = Sha256::digest(serialized.as_bytes());
         hex::encode(hash)
     }

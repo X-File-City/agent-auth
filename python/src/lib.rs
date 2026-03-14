@@ -2,7 +2,7 @@ use pyo3::prelude::*;
 use pyo3::exceptions::PyValueError;
 
 /// Python wrapper around AgentKeyPair.
-#[pyclass]
+#[pyclass(frozen)]
 struct AgentKeyPair {
     inner: kanoniv_agent_auth::AgentKeyPair,
 }

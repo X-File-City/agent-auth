@@ -103,9 +103,19 @@ export function verifyMessage(
   }
 }
 
-/** Compute the SHA-256 content hash of a signed message. */
+/** Compute the SHA-256 content hash of a signed message.
+ *
+ * Uses canonical field ordering (alphabetical) to ensure cross-language
+ * determinism: {nonce, payload, signature, signer_did, timestamp}.
+ */
 export function contentHash(message: SignedMessage): string {
-  const serialized = JSON.stringify(message);
+  // Manually construct JSON with alphabetical key order to match Rust's BTreeMap
+  const serialized =
+    `{"nonce":${JSON.stringify(message.nonce)}` +
+    `,"payload":${JSON.stringify(message.payload)}` +
+    `,"signature":${JSON.stringify(message.signature)}` +
+    `,"signer_did":${JSON.stringify(message.signer_did)}` +
+    `,"timestamp":${JSON.stringify(message.timestamp)}}`;
   const hash = sha256(new TextEncoder().encode(serialized));
   return bytesToHex(hash);
 }

@@ -160,3 +160,18 @@ class TestCrossLanguageInterop:
             json.dumps(signed_fixture["signed_message"])
         )
         rust_message.verify(kp.identity())  # should not raise
+
+    def test_content_hash_matches_rust(self):
+        signed_path = os.path.join(
+            os.path.dirname(__file__), "..", "..", "fixtures", "test-signed-message.json"
+        )
+        with open(signed_path) as f:
+            signed_fixture = json.load(f)
+
+        rust_message = SignedMessage.from_json(
+            json.dumps(signed_fixture["signed_message"])
+        )
+        expected_hash = signed_fixture["expected"]["content_hash"]
+        assert rust_message.content_hash() == expected_hash, (
+            f"Content hash mismatch: Python={rust_message.content_hash()}, Rust={expected_hash}"
+        )

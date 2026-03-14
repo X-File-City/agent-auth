@@ -36,12 +36,6 @@ export interface ProvenanceEntry {
   signed_envelope: SignedMessage;
 }
 
-/** Serialize an action type for the signed payload. */
-function serializeAction(action: ActionType): unknown {
-  if (typeof action === "string") return action;
-  return action;
-}
-
 /** Create and sign a new provenance entry. */
 export function createProvenanceEntry(
   keypair: AgentKeyPair,
@@ -52,7 +46,7 @@ export function createProvenanceEntry(
 ): ProvenanceEntry {
   const payload = {
     agent_did: keypair.identity.did,
-    action: serializeAction(action),
+    action,
     entity_ids: entityIds,
     parent_ids: parentIds,
     metadata,

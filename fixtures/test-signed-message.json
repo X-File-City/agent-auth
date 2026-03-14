@@ -1,6 +1,7 @@
 {
   "description": "Signed message for cross-language verification. Verify using the public key from test-keypair.json.",
   "expected": {
+    "content_hash": "540c43485102ef7f2cbc22c568d4c030d012c93b8899df3fa44d43df57711879",
     "content_hash_length_hex": 64,
     "payload": {
       "action": "resolve",
@@ -11,14 +12,14 @@
     "signer_did": "did:kanoniv:21fe31dfa154a261626bf854046fd227"
   },
   "signed_message": {
-    "nonce": "217be40e-93a0-420c-a5a4-ade5a8d36438",
+    "nonce": "7ec39d12-cd77-4e09-adaa-4d7412e792c8",
     "payload": {
       "action": "resolve",
       "entity_id": "entity-abc-123",
       "source": "crm"
     },
-    "signature": "cc326dd66647ea4858f2d772d44f398ef75163074963977ee153c7347ac15fbec006edad2dc7a9f317131c327540b6aa8416644c4d656c6130e9ebee38170f0e",
+    "signature": "fa8274b9be0b68b263c663d1b89992aadac91a4ff51db7eb7cb9d2149761a82b27975ac9d4671aec1b68abb1a39aa570023fa4108fe7ac7bd68c48ddade33707",
     "signer_did": "did:kanoniv:21fe31dfa154a261626bf854046fd227",
-    "timestamp": "2026-03-14T16:34:42.265Z"
+    "timestamp": "2026-03-14T16:47:40.664Z"
   }
 }

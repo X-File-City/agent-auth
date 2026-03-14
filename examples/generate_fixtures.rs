@@ -44,6 +44,7 @@ fn main() {
             "payload": payload,
             "signature_length_hex": 128,
             "content_hash_length_hex": 64,
+            "content_hash": signed.content_hash(),
         }
     });
     let signed_json = serde_json::to_string_pretty(&signed_fixture).unwrap();

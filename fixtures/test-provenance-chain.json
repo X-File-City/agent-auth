@@ -12,7 +12,7 @@
       },
       "parent_ids": [],
       "signed_envelope": {
-        "nonce": "5e1e97f0-6255-48d8-9e23-8f4edc551a57",
+        "nonce": "41a414da-ef15-4157-99fa-af20e64994af",
         "payload": {
           "action": "resolve",
           "agent_did": "did:kanoniv:21fe31dfa154a261626bf854046fd227",
@@ -24,9 +24,9 @@
           },
           "parent_ids": []
         },
-        "signature": "8ecec50aa08a3ed84e9c058453896cffa5798ad72d5083659b46051cd1d4955aab586f26aa675317e8a4c95432a922ab878b67e90d36bc621249c4af99c3d804",
+        "signature": "ca86d3e8487093a10280afdf4530053ccead4afcab659ecab17ec1bc6e4ec24bffcb870b7ee445ee97a142dba2e395b2394205d6b777e987a0e2ab5cd08d1b06",
         "signer_did": "did:kanoniv:21fe31dfa154a261626bf854046fd227",
-        "timestamp": "2026-03-14T16:34:42.266Z"
+        "timestamp": "2026-03-14T16:47:40.664Z"
       }
     },
     {
@@ -41,10 +41,10 @@
         "reason": "duplicate detected"
       },
       "parent_ids": [
-        "27327037488e6d66375eb3510eef5f74aaaa1c683e03d5131375e3b3be2ac4d0"
+        "14ac10183b4c72eaae0e8c2b1e3facdc17549eac5b988d2ff019cf6a0447a726"
       ],
       "signed_envelope": {
-        "nonce": "3e87c297-b0f4-448a-a602-bf5ad886a34e",
+        "nonce": "5b1c7030-7e9f-4ded-b792-24c66e35b1e5",
         "payload": {
           "action": "merge",
           "agent_did": "did:kanoniv:21fe31dfa154a261626bf854046fd227",
@@ -57,12 +57,12 @@
             "reason": "duplicate detected"
           },
           "parent_ids": [
-            "27327037488e6d66375eb3510eef5f74aaaa1c683e03d5131375e3b3be2ac4d0"
+            "14ac10183b4c72eaae0e8c2b1e3facdc17549eac5b988d2ff019cf6a0447a726"
           ]
         },
-        "signature": "79cf6c237f3499b0b4d84d6f94cb208db719a510ca89fc9160a1af22edd12c139f63c2c1abc8034ab2c7e217f7d2a1d43e128d11dbb7bf939e5068fd7e364d07",
+        "signature": "40c7c67d2ef67cf8cefb0ddea61f3670c788f94052e03dbc0ed2e5d57715ce80d8388ef5bdaeefc62804c0f6eac42ee02e96d17711d27d5dfd22351e397cd306",
         "signer_did": "did:kanoniv:21fe31dfa154a261626bf854046fd227",
-        "timestamp": "2026-03-14T16:34:42.266Z"
+        "timestamp": "2026-03-14T16:47:40.664Z"
       }
     }
   ],

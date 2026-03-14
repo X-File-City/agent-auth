@@ -146,10 +146,18 @@ Note: payload keys `z` and `a` retain their original order.
 The content hash of a signed message is:
 
 ```
-hex_encode(SHA-256(json_serialize(signed_message)))
+hex_encode(SHA-256(canonical_json(signed_message)))
 ```
 
-Where `json_serialize` is the standard (non-canonical) JSON serialization of the entire `SignedMessage` struct. This hash is used as a unique identifier for the message, notably for provenance chaining.
+Where `canonical_json` serializes the message with **alphabetically sorted top-level keys**:
+
+```json
+{"nonce":"...","payload":...,"signature":"...","signer_did":"...","timestamp":"..."}
+```
+
+This ensures cross-language determinism. Implementations MUST NOT use native JSON serialization (which may use insertion order or struct field order). Instead, construct the JSON string with keys in alphabetical order, matching the canonical signing approach.
+
+This hash is used as a unique identifier for the message, notably as `parent_id` in provenance DAG chaining.
 
 ## 5. Provenance Entry
 

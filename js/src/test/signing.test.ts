@@ -137,4 +137,24 @@ describe("Cross-language interop - signing", () => {
     const rustMessage = signedFixture.signed_message;
     assert.doesNotThrow(() => verifyMessage(rustMessage, kp.identity));
   });
+
+  it("produces same content hash as Rust", async () => {
+    const fs = await import("node:fs");
+    const path = await import("node:path");
+
+    const signedPath = path.resolve(
+      import.meta.dirname,
+      "../../../fixtures/test-signed-message.json",
+    );
+    const signedFixture = JSON.parse(fs.readFileSync(signedPath, "utf-8"));
+    const rustMessage = signedFixture.signed_message;
+    const expectedHash = signedFixture.expected.content_hash;
+
+    const jsHash = contentHash(rustMessage);
+    assert.equal(
+      jsHash,
+      expectedHash,
+      `Content hash mismatch: JS=${jsHash}, Rust=${expectedHash}`,
+    );
+  });
 });

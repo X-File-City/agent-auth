@@ -85,9 +85,17 @@ export function keyPairFromBytes(secret: Uint8Array): AgentKeyPair {
   return { secretKey: new Uint8Array(secret), identity };
 }
 
+/** Base64 encode bytes without requiring Node.js Buffer. */
+function base64Encode(bytes: Uint8Array): string {
+  // Use btoa which is available in Node 16+, browsers, Deno, Bun
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary);
+}
+
 /** Generate a W3C DID Document for an identity. */
 export function didDocument(identity: AgentIdentity): Record<string, unknown> {
-  const pkBase64 = Buffer.from(identity.publicKeyBytes).toString("base64");
+  const pkBase64 = base64Encode(identity.publicKeyBytes);
   return {
     "@context": ["https://www.w3.org/ns/did/v1"],
     id: identity.did,
