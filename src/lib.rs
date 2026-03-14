@@ -66,6 +66,7 @@ pub use identity::{AgentIdentity, AgentKeyPair, ServiceEndpoint};
 pub use signing::SignedMessage;
 pub use provenance::{ActionType, ProvenanceEntry};
 pub use delegation::{
-    Caveat, Delegation, Invocation, VerificationResult,
-    verify_invocation, verify_delegation_chain,
+    Caveat, Delegation, Invocation, VerificationResult, MAX_CHAIN_DEPTH,
+    verify_invocation, verify_invocation_with_revocation,
+    verify_delegation_chain, verify_delegation_chain_with_revocation,
 };

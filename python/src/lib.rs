@@ -326,13 +326,13 @@ impl Delegation {
     #[staticmethod]
     fn create_root(
         issuer_keypair: &AgentKeyPair,
-        subject_did: &str,
+        delegate_did: &str,
         caveats_json: &str,
     ) -> PyResult<Self> {
         let caveats: Vec<kanoniv_agent_auth::Caveat> = serde_json::from_str(caveats_json)
             .map_err(|e| PyValueError::new_err(format!("Invalid caveats JSON: {}", e)))?;
         let inner = kanoniv_agent_auth::Delegation::create_root(
-            &issuer_keypair.inner, subject_did, caveats,
+            &issuer_keypair.inner, delegate_did, caveats,
         ).map_err(|e| PyValueError::new_err(e.to_string()))?;
         Ok(Self { inner })
     }
@@ -341,14 +341,14 @@ impl Delegation {
     #[staticmethod]
     fn delegate(
         issuer_keypair: &AgentKeyPair,
-        subject_did: &str,
+        delegate_did: &str,
         additional_caveats_json: &str,
         parent: &Delegation,
     ) -> PyResult<Self> {
         let caveats: Vec<kanoniv_agent_auth::Caveat> = serde_json::from_str(additional_caveats_json)
             .map_err(|e| PyValueError::new_err(format!("Invalid caveats JSON: {}", e)))?;
         let inner = kanoniv_agent_auth::Delegation::delegate(
-            &issuer_keypair.inner, subject_did, caveats, parent.inner.clone(),
+            &issuer_keypair.inner, delegate_did, caveats, parent.inner.clone(),
         ).map_err(|e| PyValueError::new_err(e.to_string()))?;
         Ok(Self { inner })
     }
@@ -357,13 +357,13 @@ impl Delegation {
     fn issuer_did(&self) -> String { self.inner.issuer_did.clone() }
 
     #[getter]
-    fn subject_did(&self) -> String { self.inner.subject_did.clone() }
+    fn delegate_did(&self) -> String { self.inner.delegate_did.clone() }
 
     #[getter]
     fn depth(&self) -> usize { self.inner.depth() }
 
     fn __repr__(&self) -> String {
-        format!("Delegation(issuer='{}', subject='{}')", self.inner.issuer_did, self.inner.subject_did)
+        format!("Delegation(issuer='{}', subject='{}')", self.inner.issuer_did, self.inner.delegate_did)
     }
 }
 

@@ -62,15 +62,15 @@ pub struct Delegation {
     /// DID of the agent granting authority
     pub issuer_did: String,
     /// DID of the agent receiving authority
-    pub subject_did: String,
+    pub delegate_did: String,
     /// Issuer's public key bytes (for self-verifying chains without key resolver)
     pub issuer_public_key: Vec<u8>,
     /// Constraints on the delegated authority
     pub caveats: Vec<Caveat>,
-    /// Parent delegation that gave the issuer their authority (None for root)
-    pub parent: Option<Box<Delegation>>,
+    /// Parent delegation proving the issuer's authority (None for root)
+    pub parent_proof: Option<Box<Delegation>>,
     /// Cryptographic proof (signed by issuer)
-    pub signed_envelope: SignedMessage,
+    pub proof: SignedMessage,
 }
 
 impl Delegation {
@@ -79,11 +79,11 @@ impl Delegation {
     /// The issuer is the root authority and does not need a parent delegation.
     pub fn create_root(
         issuer_keypair: &AgentKeyPair,
-        subject_did: &str,
+        delegate_did: &str,
         caveats: Vec<Caveat>,
     ) -> Result<Self, CryptoError> {
         let issuer_identity = issuer_keypair.identity();
-        Self::create_inner(issuer_keypair, &issuer_identity.did, subject_did, caveats, None)
+        Self::create_inner(issuer_keypair, &issuer_identity.did, delegate_did, caveats, None)
     }
 
     /// Create and sign a delegated delegation (with parent chain).
@@ -92,14 +92,14 @@ impl Delegation {
     /// Additional caveats can only narrow the authority, never widen it.
     pub fn delegate(
         issuer_keypair: &AgentKeyPair,
-        subject_did: &str,
+        delegate_did: &str,
         additional_caveats: Vec<Caveat>,
         parent: Delegation,
     ) -> Result<Self, CryptoError> {
         let issuer_identity = issuer_keypair.identity();
 
         // Issuer must be the subject of the parent delegation
-        if parent.subject_did != issuer_identity.did {
+        if parent.delegate_did != issuer_identity.did {
             return Err(CryptoError::DelegationChainBroken(
                 "issuer is not the subject of parent delegation".into(),
             ));
@@ -112,7 +112,7 @@ impl Delegation {
         Self::create_inner(
             issuer_keypair,
             &issuer_identity.did,
-            subject_did,
+            delegate_did,
             all_caveats,
             Some(Box::new(parent)),
         )
@@ -121,7 +121,7 @@ impl Delegation {
     fn create_inner(
         issuer_keypair: &AgentKeyPair,
         issuer_did: &str,
-        subject_did: &str,
+        delegate_did: &str,
         caveats: Vec<Caveat>,
         parent: Option<Box<Delegation>>,
     ) -> Result<Self, CryptoError> {
@@ -135,24 +135,24 @@ impl Delegation {
         }
 
         let issuer_identity = issuer_keypair.identity();
-        let parent_hash = parent.as_ref().map(|p| p.signed_envelope.content_hash());
+        let parent_hash = parent.as_ref().map(|p| p.proof.content_hash());
 
         let payload = serde_json::json!({
             "issuer_did": issuer_did,
-            "subject_did": subject_did,
+            "delegate_did": delegate_did,
             "caveats": caveats,
             "parent_hash": parent_hash,
         });
 
-        let signed_envelope = SignedMessage::sign(issuer_keypair, payload)?;
+        let proof = SignedMessage::sign(issuer_keypair, payload)?;
 
         Ok(Self {
             issuer_did: issuer_did.to_string(),
-            subject_did: subject_did.to_string(),
+            delegate_did: delegate_did.to_string(),
             issuer_public_key: issuer_identity.public_key_bytes.clone(),
             caveats,
-            parent,
-            signed_envelope,
+            parent_proof: parent,
+            proof,
         })
     }
 
@@ -160,7 +160,7 @@ impl Delegation {
     pub fn depth(&self) -> usize {
         let mut depth = 0;
         let mut current = self;
-        while let Some(ref parent) = current.parent {
+        while let Some(ref parent) = current.parent_proof {
             depth += 1;
             current = parent;
         }
@@ -183,7 +183,7 @@ pub struct Invocation {
     /// The delegation chain proving authority
     pub delegation: Delegation,
     /// Cryptographic proof (signed by invoker)
-    pub signed_envelope: SignedMessage,
+    pub proof: SignedMessage,
 }
 
 impl Invocation {
@@ -198,7 +198,7 @@ impl Invocation {
     ) -> Result<Self, CryptoError> {
         let invoker_identity = invoker_keypair.identity();
 
-        if delegation.subject_did != invoker_identity.did {
+        if delegation.delegate_did != invoker_identity.did {
             return Err(CryptoError::DelegationChainBroken(
                 "invoker is not the subject of the delegation".into(),
             ));
@@ -208,17 +208,17 @@ impl Invocation {
             "invoker_did": invoker_identity.did,
             "action": action,
             "args": args,
-            "delegation_hash": delegation.signed_envelope.content_hash(),
+            "delegation_hash": delegation.proof.content_hash(),
         });
 
-        let signed_envelope = SignedMessage::sign(invoker_keypair, payload)?;
+        let proof = SignedMessage::sign(invoker_keypair, payload)?;
 
         Ok(Self {
             invoker_did: invoker_identity.did,
             action: action.to_string(),
             args,
             delegation,
-            signed_envelope,
+            proof,
         })
     }
 }
@@ -236,28 +236,43 @@ pub struct VerificationResult {
     pub depth: usize,
 }
 
-/// Verify an invocation's entire authority chain.
+/// Verify an invocation's entire authority chain (no revocation check).
 ///
-/// Checks:
-/// 1. Invocation signature is valid for the invoker
-/// 2. Invoker is the subject of the delegation
-/// 3. **Every** delegation signature is verified (using embedded public keys)
-/// 4. Each delegation's issuer is the subject of its parent
-/// 5. Embedded public keys match their DIDs
-/// 6. The chain terminates at the expected root authority
-/// 7. All caveats are satisfied for the invoked action
-///
-/// This is the core verification engine. No server calls.
+/// For revocation support, use `verify_invocation_with_revocation` instead.
 pub fn verify_invocation(
     invocation: &Invocation,
     invoker_identity: &AgentIdentity,
     root_identity: &AgentIdentity,
 ) -> Result<VerificationResult, CryptoError> {
+    verify_invocation_with_revocation(invocation, invoker_identity, root_identity, |_| false)
+}
+
+/// Verify an invocation's entire authority chain with optional revocation check.
+///
+/// Checks:
+/// 1. Invocation signature is valid for the invoker
+/// 2. Invoker is the delegate of the delegation
+/// 3. **Every** delegation signature is verified (using embedded public keys)
+/// 4. Each delegation's issuer is the delegate of its parent
+/// 5. Embedded public keys match their DIDs
+/// 6. No delegation in the chain has been revoked
+/// 7. The chain terminates at the expected root authority
+/// 8. All caveats are satisfied for the invoked action
+///
+/// The `is_revoked` callback receives a delegation's content hash and returns
+/// `true` if that delegation has been revoked. Use `|_| false` to skip
+/// revocation checks, or provide a lookup against your revocation service.
+pub fn verify_invocation_with_revocation(
+    invocation: &Invocation,
+    invoker_identity: &AgentIdentity,
+    root_identity: &AgentIdentity,
+    is_revoked: impl Fn(&str) -> bool,
+) -> Result<VerificationResult, CryptoError> {
     // 1. Verify invocation signature
-    invocation.signed_envelope.verify(invoker_identity)?;
+    invocation.proof.verify(invoker_identity)?;
 
     // 2. Verify invoker matches delegation subject
-    if invocation.invoker_did != invocation.delegation.subject_did {
+    if invocation.invoker_did != invocation.delegation.delegate_did {
         return Err(CryptoError::DelegationChainBroken(
             "invoker is not the subject of the delegation".into(),
         ));
@@ -296,10 +311,16 @@ pub fn verify_invocation(
         }
 
         // Verify this delegation's signature using the embedded public key
-        current.signed_envelope.verify(&issuer_identity)?;
+        current.proof.verify(&issuer_identity)?;
+
+        // Check if this delegation has been revoked
+        let delegation_hash = current.proof.content_hash();
+        if is_revoked(&delegation_hash) {
+            return Err(CryptoError::DelegationRevoked(delegation_hash));
+        }
 
         // Extract caveats from the SIGNED PAYLOAD (not outer fields) to prevent tampering
-        if let Some(signed_caveats) = current.signed_envelope.payload.get("caveats") {
+        if let Some(signed_caveats) = current.proof.payload.get("caveats") {
             if let Ok(caveats) = serde_json::from_value::<Vec<Caveat>>(signed_caveats.clone()) {
                 all_caveats.extend(caveats);
             }
@@ -316,14 +337,14 @@ pub fn verify_invocation(
             break;
         }
 
-        // Not root - must have a parent
-        match &current.parent {
+        // Not root - must have a parent proof
+        match &current.parent_proof {
             Some(parent) => {
-                if parent.subject_did != current.issuer_did {
+                if parent.delegate_did != current.issuer_did {
                     return Err(CryptoError::DelegationChainBroken(
                         format!(
-                            "delegation issuer '{}' is not the subject of parent delegation '{}'",
-                            current.issuer_did, parent.subject_did
+                            "delegation issuer '{}' is not the delegate of parent delegation '{}'",
+                            current.issuer_did, parent.delegate_did
                         ),
                     ));
                 }
@@ -355,12 +376,21 @@ pub fn verify_invocation(
     })
 }
 
-/// Verify a delegation chain without an invocation (just check the chain is valid).
-///
-/// Verifies every signature in the chain using embedded public keys.
+/// Verify a delegation chain without an invocation (no revocation check).
 pub fn verify_delegation_chain(
     delegation: &Delegation,
     root_identity: &AgentIdentity,
+) -> Result<Vec<String>, CryptoError> {
+    verify_delegation_chain_with_revocation(delegation, root_identity, |_| false)
+}
+
+/// Verify a delegation chain with optional revocation check.
+///
+/// Verifies every signature in the chain using embedded public keys.
+pub fn verify_delegation_chain_with_revocation(
+    delegation: &Delegation,
+    root_identity: &AgentIdentity,
+    is_revoked: impl Fn(&str) -> bool,
 ) -> Result<Vec<String>, CryptoError> {
     let mut chain = Vec::new();
     let mut current = delegation;
@@ -374,7 +404,7 @@ pub fn verify_delegation_chain(
             ));
         }
 
-        chain.push(current.subject_did.clone());
+        chain.push(current.delegate_did.clone());
         chain.push(current.issuer_did.clone());
 
         // Verify signature using embedded public key
@@ -392,7 +422,12 @@ pub fn verify_delegation_chain(
             ));
         }
 
-        current.signed_envelope.verify(&issuer_identity)?;
+        current.proof.verify(&issuer_identity)?;
+
+        let delegation_hash = current.proof.content_hash();
+        if is_revoked(&delegation_hash) {
+            return Err(CryptoError::DelegationRevoked(delegation_hash));
+        }
 
         if current.issuer_did == root_identity.did {
             if issuer_identity.public_key_bytes != root_identity.public_key_bytes {
@@ -403,11 +438,11 @@ pub fn verify_delegation_chain(
             break;
         }
 
-        match &current.parent {
+        match &current.parent_proof {
             Some(parent) => {
-                if parent.subject_did != current.issuer_did {
+                if parent.delegate_did != current.issuer_did {
                     return Err(CryptoError::DelegationChainBroken(
-                        "chain linkage broken: issuer not subject of parent".into(),
+                        "chain linkage broken: issuer not delegate of parent".into(),
                     ));
                 }
                 current = parent;
@@ -536,9 +571,9 @@ mod tests {
         .unwrap();
 
         assert_eq!(delegation.issuer_did, root.identity().did);
-        assert_eq!(delegation.subject_did, agent_b.identity().did);
+        assert_eq!(delegation.delegate_did, agent_b.identity().did);
         assert_eq!(delegation.depth(), 0);
-        assert!(delegation.parent.is_none());
+        assert!(delegation.parent_proof.is_none());
     }
 
     #[test]
@@ -563,9 +598,9 @@ mod tests {
         .unwrap();
 
         assert_eq!(d2.issuer_did, agent_b.identity().did);
-        assert_eq!(d2.subject_did, agent_c.identity().did);
+        assert_eq!(d2.delegate_did, agent_c.identity().did);
         assert_eq!(d2.depth(), 1);
-        assert!(d2.parent.is_some());
+        assert!(d2.parent_proof.is_some());
     }
 
     #[test]
@@ -1062,7 +1097,7 @@ mod tests {
         let json = serde_json::to_string(&delegation).unwrap();
         let restored: Delegation = serde_json::from_str(&json).unwrap();
         assert_eq!(restored.issuer_did, delegation.issuer_did);
-        assert_eq!(restored.subject_did, delegation.subject_did);
+        assert_eq!(restored.delegate_did, delegation.delegate_did);
         assert_eq!(restored.caveats.len(), 3);
     }
 
@@ -1209,8 +1244,8 @@ mod tests {
         )
         .unwrap();
 
-        // Tamper with d2's signed_envelope signature (corrupt it)
-        d2.signed_envelope.signature = "00".repeat(64);
+        // Tamper with d2's proof signature (corrupt it)
+        d2.proof.signature = "00".repeat(64);
 
         let invocation = Invocation::create(
             &agent_c,
@@ -1223,5 +1258,113 @@ mod tests {
         // Should fail because B's delegation signature is now verified
         let result = verify_invocation(&invocation, &agent_c.identity(), &root.identity());
         assert!(result.is_err());
+    }
+
+    // --- Revocation ---
+
+    #[test]
+    fn test_revocation_blocks_invocation() {
+        let root = keypair();
+        let agent_b = keypair();
+
+        let delegation = Delegation::create_root(
+            &root,
+            &agent_b.identity().did,
+            vec![],
+        )
+        .unwrap();
+
+        let revoked_hash = delegation.proof.content_hash();
+
+        let invocation = Invocation::create(
+            &agent_b,
+            "resolve",
+            serde_json::json!({}),
+            delegation,
+        )
+        .unwrap();
+
+        // Without revocation - passes
+        assert!(verify_invocation(&invocation, &agent_b.identity(), &root.identity()).is_ok());
+
+        // With revocation - fails
+        let result = verify_invocation_with_revocation(
+            &invocation,
+            &agent_b.identity(),
+            &root.identity(),
+            |hash| hash == revoked_hash,
+        );
+        assert!(matches!(result, Err(CryptoError::DelegationRevoked(_))));
+    }
+
+    #[test]
+    fn test_revocation_in_chain_blocks() {
+        let root = keypair();
+        let agent_b = keypair();
+        let agent_c = keypair();
+
+        let d1 = Delegation::create_root(
+            &root,
+            &agent_b.identity().did,
+            vec![],
+        )
+        .unwrap();
+
+        let revoked_hash = d1.proof.content_hash();
+
+        let d2 = Delegation::delegate(
+            &agent_b,
+            &agent_c.identity().did,
+            vec![],
+            d1,
+        )
+        .unwrap();
+
+        let invocation = Invocation::create(
+            &agent_c,
+            "resolve",
+            serde_json::json!({}),
+            d2,
+        )
+        .unwrap();
+
+        // Revoking the root delegation blocks the entire chain
+        let result = verify_invocation_with_revocation(
+            &invocation,
+            &agent_c.identity(),
+            &root.identity(),
+            |hash| hash == revoked_hash,
+        );
+        assert!(matches!(result, Err(CryptoError::DelegationRevoked(_))));
+    }
+
+    #[test]
+    fn test_no_revocation_callback_passes() {
+        let root = keypair();
+        let agent_b = keypair();
+
+        let delegation = Delegation::create_root(
+            &root,
+            &agent_b.identity().did,
+            vec![],
+        )
+        .unwrap();
+
+        let invocation = Invocation::create(
+            &agent_b,
+            "resolve",
+            serde_json::json!({}),
+            delegation,
+        )
+        .unwrap();
+
+        // Default (no revocation) always passes
+        let result = verify_invocation_with_revocation(
+            &invocation,
+            &agent_b.identity(),
+            &root.identity(),
+            |_| false,
+        );
+        assert!(result.is_ok());
     }
 }

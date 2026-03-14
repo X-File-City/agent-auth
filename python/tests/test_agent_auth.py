@@ -230,7 +230,7 @@ class TestDelegation:
             '[{"type": "action_scope", "value": ["resolve"]}]',
         )
         assert d.issuer_did == root.identity().did
-        assert d.subject_did == agent.identity().did
+        assert d.delegate_did == agent.identity().did
         assert d.depth == 0
 
     def test_chained_delegation(self):

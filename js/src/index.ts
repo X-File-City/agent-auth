@@ -34,8 +34,10 @@ export {
   type Delegation,
   type Invocation,
   type VerificationResult,
+  MAX_CHAIN_DEPTH,
   createRootDelegation,
   delegateAuthority,
   createInvocation,
   verifyInvocation,
+  verifyInvocationWithRevocation,
 } from "./delegation.js";

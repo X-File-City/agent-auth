@@ -18,8 +18,8 @@ describe("Delegation", () => {
     ]);
 
     assert.equal(d.issuer_did, root.identity.did);
-    assert.equal(d.subject_did, agent.identity.did);
-    assert.equal(d.parent, null);
+    assert.equal(d.delegate_did, agent.identity.did);
+    assert.equal(d.parent_proof, null);
   });
 
   it("chains delegations", () => {
@@ -33,8 +33,8 @@ describe("Delegation", () => {
     const d2 = delegateAuthority(b, c.identity.did, [], d1);
 
     assert.equal(d2.issuer_did, b.identity.did);
-    assert.equal(d2.subject_did, c.identity.did);
-    assert.ok(d2.parent !== null);
+    assert.equal(d2.delegate_did, c.identity.did);
+    assert.ok(d2.parent_proof !== null);
   });
 
   it("rejects delegation from non-subject", () => {

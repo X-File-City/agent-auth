@@ -23,12 +23,12 @@ export type Caveat =
 /** A cryptographic delegation of authority from one agent to another. */
 export interface Delegation {
   issuer_did: string;
-  subject_did: string;
+  delegate_did: string;
   /** Issuer's public key bytes (hex) for self-verifying chains. */
   issuer_public_key: string;
   caveats: Caveat[];
-  parent: Delegation | null;
-  signed_envelope: SignedMessage;
+  parent_proof: Delegation | null;
+  proof: SignedMessage;
 }
 
 /** An agent exercising delegated authority. */
@@ -37,7 +37,7 @@ export interface Invocation {
   action: string;
   args: Record<string, unknown>;
   delegation: Delegation;
-  signed_envelope: SignedMessage;
+  proof: SignedMessage;
 }
 
 /** Result of a successful verification. */
@@ -57,7 +57,7 @@ export function createRootDelegation(
   const issuerDid = issuerKeypair.identity.did;
   const payload = {
     issuer_did: issuerDid,
-    subject_did: subjectDid,
+    delegate_did: subjectDid,
     caveats,
     parent_hash: null,
   };
@@ -65,11 +65,11 @@ export function createRootDelegation(
 
   return {
     issuer_did: issuerDid,
-    subject_did: subjectDid,
+    delegate_did: subjectDid,
     issuer_public_key: bytesToHex(issuerKeypair.identity.publicKeyBytes),
     caveats,
-    parent: null,
-    signed_envelope: signedEnvelope,
+    parent_proof: null,
+    proof: signedEnvelope,
   };
 }
 
@@ -82,7 +82,7 @@ export function delegateAuthority(
 ): Delegation {
   const issuerDid = issuerKeypair.identity.did;
 
-  if (parent.subject_did !== issuerDid) {
+  if (parent.delegate_did !== issuerDid) {
     throw new CryptoError(
       "SIGNATURE_INVALID",
       "Delegation chain broken: issuer is not the subject of parent delegation",
@@ -90,10 +90,10 @@ export function delegateAuthority(
   }
 
   const allCaveats = [...parent.caveats, ...additionalCaveats];
-  const parentHash = contentHash(parent.signed_envelope);
+  const parentHash = contentHash(parent.proof);
   const payload = {
     issuer_did: issuerDid,
-    subject_did: subjectDid,
+    delegate_did: subjectDid,
     caveats: allCaveats,
     parent_hash: parentHash,
   };
@@ -101,11 +101,11 @@ export function delegateAuthority(
 
   return {
     issuer_did: issuerDid,
-    subject_did: subjectDid,
+    delegate_did: subjectDid,
     issuer_public_key: bytesToHex(issuerKeypair.identity.publicKeyBytes),
     caveats: allCaveats,
-    parent,
-    signed_envelope: signedEnvelope,
+    parent_proof: parent,
+    proof: signedEnvelope,
   };
 }
 
@@ -118,7 +118,7 @@ export function createInvocation(
 ): Invocation {
   const invokerDid = invokerKeypair.identity.did;
 
-  if (delegation.subject_did !== invokerDid) {
+  if (delegation.delegate_did !== invokerDid) {
     throw new CryptoError(
       "SIGNATURE_INVALID",
       "Delegation chain broken: invoker is not the subject of the delegation",
@@ -129,7 +129,7 @@ export function createInvocation(
     invoker_did: invokerDid,
     action,
     args,
-    delegation_hash: contentHash(delegation.signed_envelope),
+    delegation_hash: contentHash(delegation.proof),
   };
   const signedEnvelope = signMessage(invokerKeypair, payload);
 
@@ -138,21 +138,40 @@ export function createInvocation(
     action,
     args,
     delegation,
-    signed_envelope: signedEnvelope,
+    proof: signedEnvelope,
   };
 }
 
-/** Verify an invocation's entire authority chain. Every signature checked. */
+/** Verify an invocation's entire authority chain (no revocation check). */
 export function verifyInvocation(
   invocation: Invocation,
   invokerIdentity: AgentIdentity,
   rootIdentity: AgentIdentity,
 ): VerificationResult {
+  return verifyInvocationWithRevocation(
+    invocation,
+    invokerIdentity,
+    rootIdentity,
+    () => false,
+  );
+}
+
+/** Verify an invocation with optional revocation check.
+ *
+ * The `isRevoked` callback receives a delegation's content hash and returns
+ * true if revoked. Use `() => false` to skip revocation.
+ */
+export function verifyInvocationWithRevocation(
+  invocation: Invocation,
+  invokerIdentity: AgentIdentity,
+  rootIdentity: AgentIdentity,
+  isRevoked: (hash: string) => boolean,
+): VerificationResult {
   // 1. Verify invocation signature
-  verifyMessage(invocation.signed_envelope, invokerIdentity);
+  verifyMessage(invocation.proof, invokerIdentity);
 
   // 2. Verify invoker matches delegation subject
-  if (invocation.invoker_did !== invocation.delegation.subject_did) {
+  if (invocation.invoker_did !== invocation.delegation.delegate_did) {
     throw new CryptoError(
       "SIGNATURE_INVALID",
       "Delegation chain broken: invoker is not the subject of the delegation",
@@ -188,10 +207,19 @@ export function verifyInvocation(
     }
 
     // Verify this delegation's signature
-    verifyMessage(current.signed_envelope, issuerIdentity);
+    verifyMessage(current.proof, issuerIdentity);
+
+    // Check revocation
+    const delegationHash = contentHash(current.proof);
+    if (isRevoked(delegationHash)) {
+      throw new CryptoError(
+        "SIGNATURE_INVALID",
+        `Delegation revoked: ${delegationHash}`,
+      );
+    }
 
     // Extract caveats from SIGNED PAYLOAD (not outer fields)
-    const signedPayload = current.signed_envelope.payload as Record<
+    const signedPayload = current.proof.payload as Record<
       string,
       unknown
     >;
@@ -210,14 +238,14 @@ export function verifyInvocation(
         );
       }
       current = null;
-    } else if (current.parent) {
-      if (current.parent.subject_did !== current.issuer_did) {
+    } else if (current.parent_proof) {
+      if (current.parent_proof.delegate_did !== current.issuer_did) {
         throw new CryptoError(
           "SIGNATURE_INVALID",
-          `Delegation chain broken: issuer '${current.issuer_did}' is not subject of parent`,
+          `Delegation chain broken: issuer '${current.issuer_did}' is not delegate of parent`,
         );
       }
-      current = current.parent;
+      current = current.parent_proof;
     } else {
       throw new CryptoError(
         "SIGNATURE_INVALID",

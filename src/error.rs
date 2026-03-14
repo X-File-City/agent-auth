@@ -26,4 +26,7 @@ pub enum CryptoError {
 
     #[error("Caveat violation: {0}")]
     CaveatViolation(String),
+
+    #[error("Delegation revoked: {0}")]
+    DelegationRevoked(String),
 }
