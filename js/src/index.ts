@@ -41,3 +41,13 @@ export {
   verifyInvocation,
   verifyInvocationWithRevocation,
 } from "./delegation.js";
+export {
+  type McpProofData,
+  type McpAuthMode,
+  type McpAuthOutcome,
+  McpProof,
+  verifyMcpCall,
+  verifyMcpCallWithRevocation,
+  verifyMcpToolCall,
+  verifyMcpToolCallWithRevocation,
+} from "./mcp.js";

@@ -421,6 +421,117 @@ fn verify_invocation(
     Ok((result.invoker_did, result.root_did, result.chain, result.depth))
 }
 
+// ---------------------------------------------------------------------------
+// MCP Auth
+// ---------------------------------------------------------------------------
+
+/// Self-contained invocation proof for MCP transport.
+///
+/// Contains everything an MCP server needs to verify the agent's identity
+/// and authority without any external key resolver.
+#[pyclass(frozen)]
+#[derive(Clone)]
+struct McpProof {
+    inner: kanoniv_agent_auth::McpProof,
+}
+
+#[pymethods]
+impl McpProof {
+    /// Create an MCP proof for a tool call.
+    #[staticmethod]
+    fn create(
+        invoker_keypair: &AgentKeyPair,
+        action: &str,
+        args_json: &str,
+        delegation: &Delegation,
+    ) -> PyResult<Self> {
+        let args: serde_json::Value = serde_json::from_str(args_json)
+            .map_err(|e| PyValueError::new_err(format!("Invalid JSON: {}", e)))?;
+        let inner = kanoniv_agent_auth::McpProof::create(
+            &invoker_keypair.inner, action, args, delegation.inner.clone(),
+        ).map_err(|e| PyValueError::new_err(e.to_string()))?;
+        Ok(Self { inner })
+    }
+
+    /// The invoker's public key as hex string (64 chars).
+    #[getter]
+    fn invoker_public_key(&self) -> String {
+        self.inner.invoker_public_key.clone()
+    }
+
+    /// The invoker's DID.
+    #[getter]
+    fn invoker_did(&self) -> String {
+        self.inner.invocation.invoker_did.clone()
+    }
+
+    /// The action this proof authorizes.
+    #[getter]
+    fn action(&self) -> String {
+        self.inner.invocation.action.clone()
+    }
+
+    /// Serialize to JSON string (for embedding in MCP tool arguments).
+    fn to_json(&self) -> PyResult<String> {
+        serde_json::to_string(&self.inner)
+            .map_err(|e| PyValueError::new_err(format!("Serialization failed: {}", e)))
+    }
+
+    /// Deserialize from JSON string.
+    #[staticmethod]
+    fn from_json(json: &str) -> PyResult<Self> {
+        let inner: kanoniv_agent_auth::McpProof = serde_json::from_str(json)
+            .map_err(|e| PyValueError::new_err(format!("Invalid JSON: {}", e)))?;
+        Ok(Self { inner })
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "McpProof(invoker='{}', action='{}')",
+            self.inner.invocation.invoker_did, self.inner.invocation.action
+        )
+    }
+}
+
+/// Verify an MCP proof against a root authority.
+///
+/// Returns (invoker_did, root_did, chain, depth).
+/// Raises ValueError on verification failure.
+#[pyfunction]
+fn verify_mcp_call(
+    proof: &McpProof,
+    root_identity: &AgentIdentity,
+) -> PyResult<(String, String, Vec<String>, usize)> {
+    let result = kanoniv_agent_auth::mcp::verify_mcp_call(
+        &proof.inner, &root_identity.inner,
+    ).map_err(|e| PyValueError::new_err(e.to_string()))?;
+    Ok((result.invoker_did, result.root_did, result.chain, result.depth))
+}
+
+/// Extract an MCP proof from a JSON arguments string.
+///
+/// Returns (proof_json_or_none, clean_args_json).
+/// The _proof field is always stripped from the returned args.
+#[pyfunction]
+fn extract_mcp_proof(args_json: &str) -> PyResult<(Option<McpProof>, String)> {
+    let args: serde_json::Value = serde_json::from_str(args_json)
+        .map_err(|e| PyValueError::new_err(format!("Invalid JSON: {}", e)))?;
+    let (proof, clean_args) = kanoniv_agent_auth::McpProof::extract(&args);
+    let clean_json = serde_json::to_string(&clean_args).unwrap();
+    Ok((proof.map(|p| McpProof { inner: p }), clean_json))
+}
+
+/// Inject an MCP proof into tool arguments JSON.
+///
+/// Returns the arguments JSON string with _proof field added.
+#[pyfunction]
+fn inject_mcp_proof(proof: &McpProof, args_json: &str) -> PyResult<String> {
+    let mut args: serde_json::Value = serde_json::from_str(args_json)
+        .map_err(|e| PyValueError::new_err(format!("Invalid JSON: {}", e)))?;
+    proof.inner.inject(&mut args);
+    Ok(serde_json::to_string(&args).unwrap())
+}
+
 #[pymodule]
 fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<AgentKeyPair>()?;
@@ -430,6 +541,10 @@ fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyServiceEndpoint>()?;
     m.add_class::<Delegation>()?;
     m.add_class::<Invocation>()?;
+    m.add_class::<McpProof>()?;
     m.add_function(pyo3::wrap_pyfunction!(verify_invocation, m)?)?;
+    m.add_function(pyo3::wrap_pyfunction!(verify_mcp_call, m)?)?;
+    m.add_function(pyo3::wrap_pyfunction!(extract_mcp_proof, m)?)?;
+    m.add_function(pyo3::wrap_pyfunction!(inject_mcp_proof, m)?)?;
     Ok(())
 }

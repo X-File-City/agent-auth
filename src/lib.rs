@@ -58,6 +58,7 @@
 pub mod delegation;
 pub mod error;
 pub mod identity;
+pub mod mcp;
 pub mod provenance;
 pub mod signing;
 
@@ -68,5 +69,6 @@ pub use delegation::{
 };
 pub use error::CryptoError;
 pub use identity::{AgentIdentity, AgentKeyPair, ServiceEndpoint};
+pub use mcp::{McpAuthMode, McpAuthOutcome, McpProof};
 pub use provenance::{ActionType, ProvenanceEntry};
 pub use signing::SignedMessage;

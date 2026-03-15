@@ -9,6 +9,10 @@ from kanoniv_agent_auth._native import (
     Delegation,
     Invocation,
     verify_invocation,
+    McpProof,
+    verify_mcp_call,
+    extract_mcp_proof,
+    inject_mcp_proof,
 )
 
 __all__ = [
@@ -20,4 +24,8 @@ __all__ = [
     "Delegation",
     "Invocation",
     "verify_invocation",
+    "McpProof",
+    "verify_mcp_call",
+    "extract_mcp_proof",
+    "inject_mcp_proof",
 ]

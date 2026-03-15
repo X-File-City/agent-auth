@@ -1,6 +1,6 @@
 [package]
 name = "kanoniv-agent-auth"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 license = "MIT"
 description = "Cryptographic identity primitives for AI agents - Ed25519 keypairs, DIDs, signed envelopes, and provenance entries"
