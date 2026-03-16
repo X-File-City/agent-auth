@@ -6,6 +6,9 @@ import {
   delegateAuthority,
   createInvocation,
   verifyInvocation,
+  keyPairFromBytes,
+  hexToBytes,
+  contentHash,
 } from "../index.js";
 
 describe("Delegation", () => {
@@ -202,5 +205,144 @@ describe("Verification", () => {
 
     const inv = createInvocation(c, "search", {}, d2);
     assert.throws(() => verifyInvocation(inv, c.identity, root.identity));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Cross-language interop: delegation chain + caveat enforcement
+// ---------------------------------------------------------------------------
+
+describe("Cross-language interop - delegation", () => {
+  async function loadFixture() {
+    const fs = await import("node:fs");
+    const path = await import("node:path");
+    const fixturePath = path.resolve(
+      import.meta.dirname,
+      "../../../fixtures/test-delegation-chain.json",
+    );
+    return JSON.parse(fs.readFileSync(fixturePath, "utf-8"));
+  }
+
+  function loadKeypair(kpFixture: any) {
+    return keyPairFromBytes(hexToBytes(kpFixture.secret_key_hex));
+  }
+
+  it("DIDs match Rust-generated fixtures", async () => {
+    const f = await loadFixture();
+    const root = loadKeypair(f.root_keypair);
+    const delegate = loadKeypair(f.delegate_keypair);
+    const sub = loadKeypair(f.sub_delegate_keypair);
+
+    assert.equal(root.identity.did, f.root_keypair.did);
+    assert.equal(delegate.identity.did, f.delegate_keypair.did);
+    assert.equal(sub.identity.did, f.sub_delegate_keypair.did);
+  });
+
+  it("root delegation content hash matches Rust", async () => {
+    const f = await loadFixture();
+    const jsHash = contentHash(f.root_delegation.proof);
+    assert.equal(jsHash, f.root_delegation_content_hash,
+      `Root delegation hash mismatch: JS=${jsHash}, Rust=${f.root_delegation_content_hash}`);
+  });
+
+  it("sub delegation content hash matches Rust", async () => {
+    const f = await loadFixture();
+    const jsHash = contentHash(f.sub_delegation.proof);
+    assert.equal(jsHash, f.sub_delegation_content_hash,
+      `Sub delegation hash mismatch: JS=${jsHash}, Rust=${f.sub_delegation_content_hash}`);
+  });
+
+  it("content hashes are unique per delegation", async () => {
+    const f = await loadFixture();
+    const rootHash = contentHash(f.root_delegation.proof);
+    const subHash = contentHash(f.sub_delegation.proof);
+    assert.notEqual(rootHash, subHash, "Different delegations must have different hashes");
+  });
+
+  // Rebuild delegation chains from fixture keypairs (raw JSON delegations
+  // have byte-array public keys that JS can't use directly)
+  function buildChains(f: any) {
+    const root = loadKeypair(f.root_keypair);
+    const delegate = loadKeypair(f.delegate_keypair);
+    const sub = loadKeypair(f.sub_delegate_keypair);
+
+    const rootDel = createRootDelegation(root, delegate.identity.did, [
+      { type: "action_scope", value: ["write", "edit", "publish"] },
+      { type: "max_cost", value: 500.0 },
+    ]);
+    const subDel = delegateAuthority(delegate, sub.identity.did, [
+      { type: "action_scope", value: ["write"] },
+      { type: "max_cost", value: 100.0 },
+    ], rootDel);
+
+    return { root, delegate, sub, rootDel, subDel };
+  }
+
+  it("pass: delegate action in scope under budget", async () => {
+    const f = await loadFixture();
+    const { root, delegate, rootDel } = buildChains(f);
+    const tc = f.test_cases.pass_in_scope;
+
+    const inv = createInvocation(delegate, tc.action, tc.args, rootDel);
+    const result = verifyInvocation(inv, delegate.identity, root.identity);
+    assert.equal(result.depth, tc.expected_depth);
+  });
+
+  it("pass: sub-delegate action in scope under budget", async () => {
+    const f = await loadFixture();
+    const { root, sub, subDel } = buildChains(f);
+    const tc = f.test_cases.pass_sub_delegate;
+
+    const inv = createInvocation(sub, tc.action, tc.args, subDel);
+    const result = verifyInvocation(inv, sub.identity, root.identity);
+    assert.equal(result.depth, tc.expected_depth);
+  });
+
+  it("fail: delegate action outside scope", async () => {
+    const f = await loadFixture();
+    const { root, delegate, rootDel } = buildChains(f);
+    const tc = f.test_cases.fail_wrong_scope;
+
+    const inv = createInvocation(delegate, tc.action, tc.args, rootDel);
+    assert.throws(
+      () => verifyInvocation(inv, delegate.identity, root.identity),
+      (err: any) => err.message.includes("action") || err.message.includes("scope"),
+    );
+  });
+
+  it("fail: delegate over budget", async () => {
+    const f = await loadFixture();
+    const { root, delegate, rootDel } = buildChains(f);
+    const tc = f.test_cases.fail_over_budget;
+
+    const inv = createInvocation(delegate, tc.action, tc.args, rootDel);
+    assert.throws(
+      () => verifyInvocation(inv, delegate.identity, root.identity),
+      (err: any) => err.message.includes("cost") || err.message.includes("max"),
+    );
+  });
+
+  it("fail: sub-delegate over budget", async () => {
+    const f = await loadFixture();
+    const { root, sub, subDel } = buildChains(f);
+    const tc = f.test_cases.fail_sub_over_budget;
+
+    const inv = createInvocation(sub, tc.action, tc.args, subDel);
+    assert.throws(
+      () => verifyInvocation(inv, sub.identity, root.identity),
+      (err: any) => err.message.includes("cost") || err.message.includes("max"),
+    );
+  });
+
+  it("fail: sub-delegate action outside narrowed scope", async () => {
+    const f = await loadFixture();
+    const { root, sub, subDel } = buildChains(f);
+    const tc = f.test_cases.fail_sub_wrong_scope;
+
+    const inv = createInvocation(sub, tc.action, tc.args, subDel);
+    assert.throws(
+      () => verifyInvocation(inv, sub.identity, root.identity),
+      (err: any) => err.message.includes("action") || err.message.includes("scope"),
+    );
   });
 });

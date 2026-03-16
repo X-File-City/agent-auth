@@ -1,0 +1,335 @@
+{
+  "delegate_keypair": {
+    "did": "did:agent:86d62ad47a096772ff22971bdb39f0e1",
+    "public_key_hex": "1951da93fc47134c41b12d4aff35dfddfe574d274834b439ebc99e16cbd0bc2c",
+    "secret_key_hex": "a1b2c3d4e5f60718293a4b5c6d7e8f900112233445566778899aabbccddeeff0"
+  },
+  "description": "Delegation chain with caveat enforcement test vectors. Root -> Delegate (write/edit/publish, $500) -> SubDelegate (write, $100).",
+  "root_delegation": {
+    "caveats": [
+      {
+        "type": "action_scope",
+        "value": [
+          "write",
+          "edit",
+          "publish"
+        ]
+      },
+      {
+        "type": "max_cost",
+        "value": 500.0
+      }
+    ],
+    "delegate_did": "did:agent:86d62ad47a096772ff22971bdb39f0e1",
+    "issuer_did": "did:agent:21fe31dfa154a261626bf854046fd227",
+    "issuer_public_key": [
+      215,
+      90,
+      152,
+      1,
+      130,
+      177,
+      10,
+      183,
+      213,
+      75,
+      254,
+      211,
+      201,
+      100,
+      7,
+      58,
+      14,
+      225,
+      114,
+      243,
+      218,
+      166,
+      35,
+      37,
+      175,
+      2,
+      26,
+      104,
+      247,
+      7,
+      81,
+      26
+    ],
+    "parent_proof": null,
+    "proof": {
+      "nonce": "06fe2def-8bfb-49b0-be5d-9077283c3607",
+      "payload": {
+        "caveats": [
+          {
+            "type": "action_scope",
+            "value": [
+              "write",
+              "edit",
+              "publish"
+            ]
+          },
+          {
+            "type": "max_cost",
+            "value": 500.0
+          }
+        ],
+        "delegate_did": "did:agent:86d62ad47a096772ff22971bdb39f0e1",
+        "issuer_did": "did:agent:21fe31dfa154a261626bf854046fd227",
+        "parent_hash": null
+      },
+      "signature": "443d0f7798938e10b124403403581c37f30cb006d5708ddf497e98bdae926ba5da4e75d9260890789a13b05eb75f954955759c0d2c05e78e7f8c132a36e71b01",
+      "signer_did": "did:agent:21fe31dfa154a261626bf854046fd227",
+      "timestamp": "2026-03-16T10:01:56.137Z"
+    }
+  },
+  "root_delegation_content_hash": "ce25539780e4e14296a39d977697e3de692ce326e55ce9daa3db9bf96de5ebed",
+  "root_keypair": {
+    "did": "did:agent:21fe31dfa154a261626bf854046fd227",
+    "public_key_hex": "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a",
+    "secret_key_hex": "9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60"
+  },
+  "sub_delegate_keypair": {
+    "did": "did:agent:45212308b07957a7d224bac4b85aadb5",
+    "public_key_hex": "fbd95b422c6aaa1e6852c4685a0803314a88af44b7d8e346fd6f995950e191c6",
+    "secret_key_hex": "112233445566778899aabbccddeeff00102030405060708090a0b0c0d0e0f001"
+  },
+  "sub_delegation": {
+    "caveats": [
+      {
+        "type": "action_scope",
+        "value": [
+          "write",
+          "edit",
+          "publish"
+        ]
+      },
+      {
+        "type": "max_cost",
+        "value": 500.0
+      },
+      {
+        "type": "action_scope",
+        "value": [
+          "write"
+        ]
+      },
+      {
+        "type": "max_cost",
+        "value": 100.0
+      }
+    ],
+    "delegate_did": "did:agent:45212308b07957a7d224bac4b85aadb5",
+    "issuer_did": "did:agent:86d62ad47a096772ff22971bdb39f0e1",
+    "issuer_public_key": [
+      25,
+      81,
+      218,
+      147,
+      252,
+      71,
+      19,
+      76,
+      65,
+      177,
+      45,
+      74,
+      255,
+      53,
+      223,
+      221,
+      254,
+      87,
+      77,
+      39,
+      72,
+      52,
+      180,
+      57,
+      235,
+      201,
+      158,
+      22,
+      203,
+      208,
+      188,
+      44
+    ],
+    "parent_proof": {
+      "caveats": [
+        {
+          "type": "action_scope",
+          "value": [
+            "write",
+            "edit",
+            "publish"
+          ]
+        },
+        {
+          "type": "max_cost",
+          "value": 500.0
+        }
+      ],
+      "delegate_did": "did:agent:86d62ad47a096772ff22971bdb39f0e1",
+      "issuer_did": "did:agent:21fe31dfa154a261626bf854046fd227",
+      "issuer_public_key": [
+        215,
+        90,
+        152,
+        1,
+        130,
+        177,
+        10,
+        183,
+        213,
+        75,
+        254,
+        211,
+        201,
+        100,
+        7,
+        58,
+        14,
+        225,
+        114,
+        243,
+        218,
+        166,
+        35,
+        37,
+        175,
+        2,
+        26,
+        104,
+        247,
+        7,
+        81,
+        26
+      ],
+      "parent_proof": null,
+      "proof": {
+        "nonce": "06fe2def-8bfb-49b0-be5d-9077283c3607",
+        "payload": {
+          "caveats": [
+            {
+              "type": "action_scope",
+              "value": [
+                "write",
+                "edit",
+                "publish"
+              ]
+            },
+            {
+              "type": "max_cost",
+              "value": 500.0
+            }
+          ],
+          "delegate_did": "did:agent:86d62ad47a096772ff22971bdb39f0e1",
+          "issuer_did": "did:agent:21fe31dfa154a261626bf854046fd227",
+          "parent_hash": null
+        },
+        "signature": "443d0f7798938e10b124403403581c37f30cb006d5708ddf497e98bdae926ba5da4e75d9260890789a13b05eb75f954955759c0d2c05e78e7f8c132a36e71b01",
+        "signer_did": "did:agent:21fe31dfa154a261626bf854046fd227",
+        "timestamp": "2026-03-16T10:01:56.137Z"
+      }
+    },
+    "proof": {
+      "nonce": "4998ca9c-6e36-4043-b6bd-29723e8e706f",
+      "payload": {
+        "caveats": [
+          {
+            "type": "action_scope",
+            "value": [
+              "write",
+              "edit",
+              "publish"
+            ]
+          },
+          {
+            "type": "max_cost",
+            "value": 500.0
+          },
+          {
+            "type": "action_scope",
+            "value": [
+              "write"
+            ]
+          },
+          {
+            "type": "max_cost",
+            "value": 100.0
+          }
+        ],
+        "delegate_did": "did:agent:45212308b07957a7d224bac4b85aadb5",
+        "issuer_did": "did:agent:86d62ad47a096772ff22971bdb39f0e1",
+        "parent_hash": "ce25539780e4e14296a39d977697e3de692ce326e55ce9daa3db9bf96de5ebed"
+      },
+      "signature": "2f4043e4b142ccffff01e5a1d0f2971a054005c505bde1b9925e49eca2e15141a720d7e372edc363705872a066c7fb64408a83764fe1697d11a581a3654a3904",
+      "signer_did": "did:agent:86d62ad47a096772ff22971bdb39f0e1",
+      "timestamp": "2026-03-16T10:01:56.153Z"
+    }
+  },
+  "sub_delegation_content_hash": "096e8c7087f666943999db96a4d5bb6083313996479e8f42e9ea1bc2302ce6e4",
+  "test_cases": {
+    "fail_over_budget": {
+      "action": "write",
+      "agent": "delegate",
+      "args": {
+        "cost": 600,
+        "topic": "expensive"
+      },
+      "expected": "fail",
+      "expected_reason": "max_cost"
+    },
+    "fail_sub_over_budget": {
+      "action": "write",
+      "agent": "sub_delegate",
+      "args": {
+        "cost": 150,
+        "topic": "too expensive"
+      },
+      "expected": "fail",
+      "expected_reason": "max_cost"
+    },
+    "fail_sub_wrong_scope": {
+      "action": "edit",
+      "agent": "sub_delegate",
+      "args": {
+        "cost": 10,
+        "topic": "not allowed"
+      },
+      "expected": "fail",
+      "expected_reason": "action_scope"
+    },
+    "fail_wrong_scope": {
+      "action": "spend",
+      "agent": "delegate",
+      "args": {
+        "cost": 50,
+        "platform": "ads"
+      },
+      "expected": "fail",
+      "expected_reason": "action_scope"
+    },
+    "pass_in_scope": {
+      "action": "write",
+      "agent": "delegate",
+      "args": {
+        "cost": 50,
+        "topic": "blog post"
+      },
+      "expected": "pass",
+      "expected_depth": 1
+    },
+    "pass_sub_delegate": {
+      "action": "write",
+      "agent": "sub_delegate",
+      "args": {
+        "cost": 75,
+        "topic": "draft"
+      },
+      "expected": "pass",
+      "expected_depth": 2
+    }
+  }
+}

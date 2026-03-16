@@ -12,7 +12,7 @@
       },
       "parent_ids": [],
       "signed_envelope": {
-        "nonce": "b4eff95b-9c0f-474c-8641-058547b7063d",
+        "nonce": "b388d3d2-3edb-4e34-80bc-38fc49780c65",
         "payload": {
           "action": "resolve",
           "agent_did": "did:agent:21fe31dfa154a261626bf854046fd227",
@@ -24,9 +24,9 @@
           },
           "parent_ids": []
         },
-        "signature": "cb1f793695b293163b259ce0525ecd5196b25960863103eb9c8fb3897425567c27b0148d5be7f6f025f0b4c0b8da0dcefd79f74923f2fb240c7f21cfa90ebc05",
+        "signature": "a48601a1532a248a7145a9f1c0baed2f4b5a4c085c775c6b0bb6e84f75584d09b7ca98a09da8e7e55e4c2e72b83a157d9fb0200841b642173910a90d08dafd0c",
         "signer_did": "did:agent:21fe31dfa154a261626bf854046fd227",
-        "timestamp": "2026-03-14T17:29:43.164Z"
+        "timestamp": "2026-03-16T10:01:56.137Z"
       }
     },
     {
@@ -41,10 +41,10 @@
         "reason": "duplicate detected"
       },
       "parent_ids": [
-        "c013dd60a059ed75fe4006537f0e0aae45d8f8ba8b791197d37a79d51ec5d6b8"
+        "609cba87e08f9a79eb8406105231815be92e65cb67f5de85a7186b52324e053c"
       ],
       "signed_envelope": {
-        "nonce": "3c4e99e6-8ccf-4589-9698-988be16c93ee",
+        "nonce": "d5a7f089-fddb-4d99-9e8a-08aa8ab44d40",
         "payload": {
           "action": "merge",
           "agent_did": "did:agent:21fe31dfa154a261626bf854046fd227",
@@ -57,12 +57,12 @@
             "reason": "duplicate detected"
           },
           "parent_ids": [
-            "c013dd60a059ed75fe4006537f0e0aae45d8f8ba8b791197d37a79d51ec5d6b8"
+            "609cba87e08f9a79eb8406105231815be92e65cb67f5de85a7186b52324e053c"
           ]
         },
-        "signature": "cb74e69ae192a849893da7377982eabaca847a877adb9c39e93586d1a706d0391000d706590e89defab0c87d869a81a9dd43ec54100750210b867f5353505603",
+        "signature": "3da7e1492142f803083f4ec472e09de8451ddc9029f056fd71018debf2d6d688e4e6d724df9f9d43c52f67119f8066938effbc33c0932c9ccddec47caca60600",
         "signer_did": "did:agent:21fe31dfa154a261626bf854046fd227",
-        "timestamp": "2026-03-14T17:29:43.164Z"
+        "timestamp": "2026-03-16T10:01:56.137Z"
       }
     }
   ],

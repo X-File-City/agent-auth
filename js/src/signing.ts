@@ -130,13 +130,41 @@ export function contentHash(message: SignedMessage): string {
     );
   }
 
-  // Manually construct JSON with alphabetical key order to match Rust's BTreeMap
+  // Rust's serde_json (without preserve_order) uses BTreeMap for ALL objects,
+  // sorting keys alphabetically at every nesting level. We must match that.
   const serialized =
     `{"nonce":${JSON.stringify(message.nonce)}` +
-    `,"payload":${JSON.stringify(message.payload)}` +
+    `,"payload":${sortedStringify(message.payload)}` +
     `,"signature":${JSON.stringify(message.signature)}` +
     `,"signer_did":${JSON.stringify(message.signer_did)}` +
     `,"timestamp":${JSON.stringify(message.timestamp)}}`;
   const hash = sha256(new TextEncoder().encode(serialized));
   return bytesToHex(hash);
+}
+
+/**
+ * Recursively serialize a value with sorted object keys (matching Rust's BTreeMap).
+ *
+ * Rust's serde_json serializes whole floats with a trailing `.0` (e.g. `500.0`),
+ * while JS's JSON.stringify drops it (e.g. `500`). We match Rust's behavior
+ * so content hashes are identical across languages.
+ */
+function sortedStringify(value: unknown): string {
+  if (value === null || value === undefined) return "null";
+  if (typeof value === "string") return JSON.stringify(value);
+  if (typeof value === "boolean") return String(value);
+  if (typeof value === "number") {
+    // Rust's serde_json serializes f64 whole numbers with .0 suffix
+    if (Number.isFinite(value) && Number.isInteger(value)) return value + ".0";
+    return String(value);
+  }
+  if (Array.isArray(value)) return "[" + value.map(sortedStringify).join(",") + "]";
+  if (typeof value === "object") {
+    const keys = Object.keys(value).sort();
+    const entries = keys.map(
+      (k) => JSON.stringify(k) + ":" + sortedStringify((value as Record<string, unknown>)[k]),
+    );
+    return "{" + entries.join(",") + "}";
+  }
+  return JSON.stringify(value);
 }

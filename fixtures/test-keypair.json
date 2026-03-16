@@ -15,7 +15,7 @@
     "verificationMethod": [
       {
         "controller": "did:agent:21fe31dfa154a261626bf854046fd227",
-        "created": "2026-03-14T17:29:43.164Z",
+        "created": "2026-03-16T10:01:56.136Z",
         "id": "did:agent:21fe31dfa154a261626bf854046fd227#key-1",
         "publicKeyMultibase": "z6MktwupdmLXVVqTzCw4i46r4uGyosGXRnR3XjN4Zq7oMMsw",
         "type": "Ed25519VerificationKey2020"
