@@ -291,10 +291,14 @@ def route_after_coordinator(state: PipelineState) -> str:
 
 
 def route_after_specialist(state: PipelineState) -> str:
-    """After a specialist runs, check for errors or continue."""
+    """After a specialist runs, check for errors or exit.
+
+    We exit after each specialist so the outer loop can inject
+    the next agent's delegation context before the next phase.
+    """
     if "error" in state and state["error"]:
         return "error"
-    return "coordinator"
+    return "done"
 
 
 # ---------------------------------------------------------------------------
@@ -327,10 +331,11 @@ def build_graph():
         "done": END,
     })
 
-    # Each specialist either loops back to coordinator or hits error
+    # Each specialist exits the graph (so the outer loop can re-inject context)
+    # or routes to error on delegation failure
     for node in ("search", "summarize", "draft", "edit", "review"):
         graph.add_conditional_edges(node, route_after_specialist, {
-            "coordinator": "coordinator",
+            "done": END,
             "error": "error",
         })
 
