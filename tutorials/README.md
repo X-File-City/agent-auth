@@ -32,7 +32,34 @@ Human
 - **Delegation** - authority flows Human -> Coordinator -> Specialists, narrowing at each step
 - **Budget constraints** - each agent has a max cost caveat enforced cryptographically
 - **Scope enforcement** - agents are blocked when acting outside their delegated actions
-- **Error routing** - denied actions route to an error handler, not silent failures
+- **Revocation** - Writer's delegation revoked mid-pipeline, next call fails immediately, other agents unaffected
+- **Audit trail** - every verified action logged with agent DID and chain depth
+
+### Example output
+
+```
+--- Audit Trail (5 verified actions) ---
+
+      search  did:..5ed8407ae4cc  depth=2
+   summarize  did:..5ed8407ae4cc  depth=2
+       draft  did:..b70da4fe5818  depth=2
+        edit  did:..b70da4fe5818  depth=2
+      review  did:..5ab4822a4cd9  depth=2
+
+--- Authority Boundary Tests ---
+
+  Researcher tries to draft:  BLOCKED (action not in scope)
+  Writer tries to search:     BLOCKED (action not in scope)
+  Reviewer tries to edit:     BLOCKED (action not in scope)
+  Writer tries $5 draft:      BLOCKED (exceeds $3 budget)
+
+--- Mid-Pipeline Revocation ---
+
+  Writer drafts (before revocation): OK
+  Writer delegation revoked
+  Writer drafts (after revocation):  BLOCKED
+  Researcher searches (unaffected):  OK
+```
 
 ### Run
 
