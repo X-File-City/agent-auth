@@ -107,8 +107,29 @@ export function verifyMessage(
  *
  * Uses canonical field ordering (alphabetical) to ensure cross-language
  * determinism: {nonce, payload, signature, signer_did, timestamp}.
+ *
+ * Throws if the input is not a valid SignedMessage (e.g. a Delegation
+ * object passed by mistake). Without this guard every non-SignedMessage
+ * hashes to the same constant because all fields are undefined.
  */
 export function contentHash(message: SignedMessage): string {
+  // Runtime guard: TypeScript interfaces are erased at runtime, so callers
+  // can accidentally pass a Delegation (which has none of the SignedMessage
+  // fields). When every field is undefined the hash is constant - a silent,
+  // dangerous bug. Fail fast instead.
+  if (
+    typeof message.nonce !== "string" ||
+    typeof message.signature !== "string" ||
+    typeof message.signer_did !== "string" ||
+    typeof message.timestamp !== "string" ||
+    message.payload === undefined
+  ) {
+    throw new CryptoError(
+      "SIGNATURE_INVALID",
+      "contentHash requires a SignedMessage with nonce, payload, signature, signer_did, and timestamp fields",
+    );
+  }
+
   // Manually construct JSON with alphabetical key order to match Rust's BTreeMap
   const serialized =
     `{"nonce":${JSON.stringify(message.nonce)}` +

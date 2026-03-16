@@ -254,10 +254,24 @@ export function verifyInvocationWithRevocation(
     }
   }
 
-  // 4. Check caveats from signed payloads
-  const now = new Date().toISOString().replace(/(\.\d{3})\d*Z$/, "$1Z");
-  for (const caveat of allCaveats) {
-    checkCaveat(caveat, invocation.action, invocation.args, now);
+  // 4. Check all caveats from signed payloads against the invocation
+  if (allCaveats.length > 0) {
+    // Runtime guard: args must be a non-null object for caveat checks.
+    // Without this, a string or null args would silently bypass max_cost /
+    // resource / context caveats because property access on non-objects
+    // returns undefined instead of throwing.
+    const args = invocation.args;
+    if (args === null || args === undefined || typeof args !== "object") {
+      throw new CryptoError(
+        "SIGNATURE_INVALID",
+        "Invocation args must be an object (not string, null, or undefined) when caveats are present",
+      );
+    }
+
+    const now = new Date().toISOString().replace(/(\.\d{3})\d*Z$/, "$1Z");
+    for (const caveat of allCaveats) {
+      checkCaveat(caveat, invocation.action, args, now);
+    }
   }
 
   return {
