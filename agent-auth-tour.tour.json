@@ -7,14 +7,14 @@
     {
       "id": "overview",
       "title": "The Big Picture",
-      "description": "Welcome to agent-auth — a cryptographic identity and delegation framework for AI agents. The project provides byte-identical implementations across Rust, TypeScript, and Python so that agents written in any language can prove authority to servers in any other language. The core modules handle identity (Ed25519 keypairs + DIDs), signing, delegation chains with caveats, MCP proof injection, and provenance audit trails.",
+      "description": "Welcome to agent-auth — a cryptographic identity and delegation framework for AI agents. The project provides byte-identical implementations across Rust, TypeScript, and Python so that agents written in any language can prove authority to servers in any other language. The core modules handle identity (cryptographic keypairs and DIDs), signing, delegation chains with caveats, MCP proof injection, and provenance audit trails.",
       "colorMode": "fileTypes",
       "focusDirectory": ""
     },
     {
       "id": "rust-core",
       "title": "Rust Core — The Source of Truth",
-      "description": "The canonical implementation lives in src/. Rust is the source of truth for cross-language compatibility. The identity module generates Ed25519 keypairs and derives DIDs. The delegation module enforces caveat chains (action_scope, expires_at, max_cost, resource, context, custom). The MCP module handles proof extraction and injection for tool calls.",
+      "description": "The canonical implementation lives in src/. Rust is the source of truth for cross-language compatibility. The identity module generates cryptographic keypairs and derives DIDs. The delegation module enforces caveat chains that control what actions agents can perform, when, and at what cost. The MCP module handles proof extraction and injection for tool calls.",
       "focusDirectory": "src",
       "colorMode": "fileTypes",
       "highlightLayers": [
