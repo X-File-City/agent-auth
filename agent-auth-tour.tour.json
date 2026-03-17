@@ -1,0 +1,219 @@
+{
+  "id": "agent-auth-intro",
+  "title": "Agent Auth: Cryptographic Identity for AI Agents",
+  "description": "A guided tour of kanoniv-agent-auth, a cross-language cryptographic delegation framework that provides the missing authentication layer for MCP servers. Explore the Rust, TypeScript, and Python implementations, delegation chains, and framework integrations.",
+  "version": "1.0.0",
+  "steps": [
+    {
+      "id": "overview",
+      "title": "The Big Picture",
+      "description": "Welcome to agent-auth — a cryptographic identity and delegation framework for AI agents. The project provides byte-identical implementations across Rust, TypeScript, and Python so that agents written in any language can prove authority to servers in any other language. The core modules handle identity (Ed25519 keypairs + DIDs), signing, delegation chains with caveats, MCP proof injection, and provenance audit trails.",
+      "colorMode": "fileTypes",
+      "focusDirectory": ""
+    },
+    {
+      "id": "rust-core",
+      "title": "Rust Core — The Source of Truth",
+      "description": "The canonical implementation lives in src/. Rust is the source of truth for cross-language compatibility. The identity module generates Ed25519 keypairs and derives DIDs. The delegation module enforces caveat chains (action_scope, expires_at, max_cost, resource, context, custom). The MCP module handles proof extraction and injection for tool calls.",
+      "focusDirectory": "src",
+      "colorMode": "fileTypes",
+      "highlightLayers": [
+        {
+          "id": "rust-identity",
+          "name": "Identity & Signing",
+          "color": "#3b82f6",
+          "items": [
+            { "path": "src/identity.rs", "type": "file" },
+            { "path": "src/signing.rs", "type": "file" }
+          ],
+          "opacity": 0.8,
+          "renderStrategy": "border"
+        },
+        {
+          "id": "rust-delegation",
+          "name": "Delegation & MCP",
+          "color": "#f59e0b",
+          "items": [
+            { "path": "src/delegation.rs", "type": "file" },
+            { "path": "src/mcp.rs", "type": "file" }
+          ],
+          "opacity": 0.8,
+          "renderStrategy": "border"
+        },
+        {
+          "id": "rust-provenance",
+          "name": "Provenance & Audit",
+          "color": "#10b981",
+          "items": [
+            { "path": "src/provenance.rs", "type": "file" }
+          ],
+          "opacity": 0.8,
+          "renderStrategy": "border"
+        }
+      ]
+    },
+    {
+      "id": "typescript-impl",
+      "title": "TypeScript Implementation",
+      "description": "The js/ directory contains a modern TypeScript implementation published to npm as @kanoniv/agent-auth. It mirrors the Rust API exactly — same modules for identity, signing, delegation, MCP, and provenance. The CLI provides command-line access to key generation and verification. Tests validate byte-identical output against shared fixtures.",
+      "focusDirectory": "js/src",
+      "colorMode": "fileTypes",
+      "highlightLayers": [
+        {
+          "id": "ts-core",
+          "name": "Core Modules",
+          "color": "#3b82f6",
+          "items": [
+            { "path": "js/src/identity.ts", "type": "file" },
+            { "path": "js/src/signing.ts", "type": "file" },
+            { "path": "js/src/delegation.ts", "type": "file" },
+            { "path": "js/src/mcp.ts", "type": "file" },
+            { "path": "js/src/provenance.ts", "type": "file" }
+          ],
+          "opacity": 0.8,
+          "renderStrategy": "border"
+        },
+        {
+          "id": "ts-tests",
+          "name": "Test Suite",
+          "color": "#10b981",
+          "items": [
+            { "path": "js/src/test", "type": "directory" }
+          ],
+          "opacity": 0.7,
+          "renderStrategy": "border"
+        }
+      ]
+    },
+    {
+      "id": "python-impl",
+      "title": "Python + PyO3 Bridge",
+      "description": "The Python implementation uses PyO3 to expose Rust cryptographic operations as a native Python extension. The src/lib.rs file contains the FFI bindings, while the Python package in kanoniv_agent_auth/ provides a clean Pythonic API. Maturin handles the build pipeline from Rust to installable Python wheel.",
+      "focusDirectory": "python",
+      "colorMode": "fileTypes",
+      "highlightLayers": [
+        {
+          "id": "pyo3-bridge",
+          "name": "PyO3 FFI Bridge",
+          "color": "#f59e0b",
+          "items": [
+            { "path": "python/src/lib.rs", "type": "file" }
+          ],
+          "opacity": 0.8,
+          "renderStrategy": "border"
+        },
+        {
+          "id": "python-package",
+          "name": "Python Package",
+          "color": "#3b82f6",
+          "items": [
+            { "path": "python/src/kanoniv_agent_auth", "type": "directory" }
+          ],
+          "opacity": 0.8,
+          "renderStrategy": "border"
+        }
+      ]
+    },
+    {
+      "id": "cross-lang-fixtures",
+      "title": "Cross-Language Test Fixtures",
+      "description": "The fixtures/ directory is the linchpin of cross-language compatibility. These deterministic test vectors — generated from known secret keys — ensure that all three implementations produce byte-identical DIDs, content hashes, signatures, and delegation verification results. Every language's test suite validates against these shared fixtures.",
+      "focusDirectory": "fixtures",
+      "colorMode": "fileTypes",
+      "highlightLayers": [
+        {
+          "id": "fixture-files",
+          "name": "Test Vectors",
+          "color": "#8b5cf6",
+          "items": [
+            { "path": "fixtures/test-keypair.json", "type": "file" },
+            { "path": "fixtures/test-signed-message.json", "type": "file" },
+            { "path": "fixtures/test-delegation-chain.json", "type": "file" },
+            { "path": "fixtures/test-provenance-chain.json", "type": "file" }
+          ],
+          "opacity": 0.8,
+          "renderStrategy": "border"
+        }
+      ]
+    },
+    {
+      "id": "framework-integrations",
+      "title": "Framework Integrations",
+      "description": "Drop-in integrations for popular AI agent frameworks. The MCP SDK middleware (TypeScript and Python) adds delegation verification to any MCP server. Additional integrations cover CrewAI, LangGraph, OpenAI Agents SDK, and AutoGen — each wrapping the core auth primitives into framework-idiomatic patterns like decorators and middleware.",
+      "focusDirectory": "integrations",
+      "colorMode": "fileTypes",
+      "highlightLayers": [
+        {
+          "id": "mcp-middleware",
+          "name": "MCP SDK Middleware",
+          "color": "#3b82f6",
+          "items": [
+            { "path": "integrations/mcp-sdk-typescript", "type": "directory" },
+            { "path": "integrations/mcp_sdk_python.py", "type": "file" }
+          ],
+          "opacity": 0.8,
+          "renderStrategy": "border"
+        },
+        {
+          "id": "agent-frameworks",
+          "name": "Agent Framework Adapters",
+          "color": "#ef4444",
+          "items": [
+            { "path": "integrations/crewai_auth.py", "type": "file" },
+            { "path": "integrations/langgraph_auth.py", "type": "file" },
+            { "path": "integrations/openai_agents_auth.py", "type": "file" },
+            { "path": "integrations/autogen_auth.py", "type": "file" }
+          ],
+          "opacity": 0.8,
+          "renderStrategy": "border"
+        }
+      ]
+    },
+    {
+      "id": "demos-and-examples",
+      "title": "Demos & Examples",
+      "description": "The demo/ directory showcases multi-agent orchestration scenarios including healthcare delegation, financial operations with cost tracking, and agent debate with competing authorities. The examples/ directory has runnable MCP server/client demos. Tutorials walk through LangGraph multi-agent handoff with budget constraints and revocation.",
+      "focusDirectory": "",
+      "colorMode": "fileTypes",
+      "highlightLayers": [
+        {
+          "id": "demos",
+          "name": "Interactive Demos",
+          "color": "#f59e0b",
+          "items": [
+            { "path": "demo", "type": "directory" }
+          ],
+          "opacity": 0.7,
+          "renderStrategy": "border"
+        },
+        {
+          "id": "examples",
+          "name": "Runnable Examples",
+          "color": "#10b981",
+          "items": [
+            { "path": "examples", "type": "directory" }
+          ],
+          "opacity": 0.7,
+          "renderStrategy": "border"
+        },
+        {
+          "id": "tutorials",
+          "name": "Tutorials",
+          "color": "#8b5cf6",
+          "items": [
+            { "path": "tutorials", "type": "directory" }
+          ],
+          "opacity": 0.7,
+          "renderStrategy": "border"
+        }
+      ]
+    },
+    {
+      "id": "full-picture",
+      "title": "The Complete Architecture",
+      "description": "Agent-auth delivers a single trust primitive — cryptographic delegation — across three languages with byte-identical guarantees. The Rust core is the source of truth. TypeScript and Python mirror it exactly. Shared fixtures enforce cross-language compatibility. Framework integrations make adoption a one-liner. Together, they give AI agents verifiable authority without implicit trust or shared API keys.",
+      "focusDirectory": "",
+      "colorMode": "fileTypes"
+    }
+  ]
+}
